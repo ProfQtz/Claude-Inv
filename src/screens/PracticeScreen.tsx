@@ -32,7 +32,14 @@ const DRILLS: { kind: DrillKind; title: string; description: string; icon: strin
   },
 ];
 
-export function PracticeScreen({ progress, onStart }: { progress: Progress; onStart: (kind: DrillKind) => void }) {
+interface Props {
+  progress: Progress;
+  onStart: (kind: DrillKind) => void;
+  onStartReview: () => void;
+}
+
+export function PracticeScreen({ progress, onStart, onStartReview }: Props) {
+  const reviewCount = progress.reviewQueue.length;
   return (
     <div className="practice">
       <h1>Practice</h1>
@@ -41,6 +48,20 @@ export function PracticeScreen({ progress, onStart }: { progress: Progress; onSt
         {progress.hearts < MAX_HEARTS ? ` (you have ${progress.hearts}/${MAX_HEARTS})` : ""}.
       </p>
       <div className="drill-grid">
+        <button className="drill-card review" disabled={reviewCount === 0} onClick={onStartReview}>
+          <span className="drill-icon" style={{ background: "#ff9600" }}>
+            🔁
+          </span>
+          <span className="drill-text">
+            <strong>Review Mistakes</strong>
+            <span>
+              {reviewCount === 0
+                ? "Nothing to review yet. Questions you miss in lessons show up here."
+                : `${reviewCount} question${reviewCount === 1 ? "" : "s"} you missed. Get one right here to clear it.`}
+            </span>
+          </span>
+          {reviewCount > 0 && <span className="review-badge">{reviewCount}</span>}
+        </button>
         {DRILLS.map((d) => (
           <button key={d.kind} className="drill-card" onClick={() => onStart(d.kind)}>
             <span className="drill-icon" style={{ background: d.color }}>

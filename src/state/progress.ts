@@ -4,6 +4,10 @@ export const MAX_HEARTS = 5;
 export const HEART_REFILL_MS = 20 * 60 * 1000;
 export const HEART_REFILL_GEM_COST = 50;
 export const XP_PER_LEVEL = 60;
+export const STREAK_FREEZE_GEM_COST = 200;
+export const MAX_STREAK_FREEZES = 2;
+/** Most missed exercises kept for review; the oldest drop off first. */
+export const MAX_REVIEW_ITEMS = 40;
 
 export interface LessonRecord {
   completions: number;
@@ -24,6 +28,11 @@ export interface Progress {
   lessons: Record<string, LessonRecord>;
   perfectLessons: number;
   drillsCompleted: number;
+  /** Each freeze covers one missed day without breaking the streak. */
+  streakFreezes: number;
+  /** Missed course exercises ("lessonId#index") waiting to be reviewed. */
+  reviewQueue: string[];
+  soundOn: boolean;
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -40,6 +49,9 @@ export function initialProgress(now = Date.now()): Progress {
     lessons: {},
     perfectLessons: 0,
     drillsCompleted: 0,
+    streakFreezes: 0,
+    reviewQueue: [],
+    soundOn: true,
   };
 }
 
@@ -55,11 +67,23 @@ export function addDays(day: string, delta: number): string {
   return dayKey(new Date(y, m - 1, d + delta).getTime());
 }
 
-/** Streak as it stands today: it lapses if yesterday was missed. */
+/** Whole calendar days from day `a` to day `b`. */
+export function daysBetween(a: string, b: string): number {
+  const toTime = (day: string) => {
+    const [y, m, d] = day.split("-").map(Number);
+    return new Date(y, m - 1, d, 12).getTime();
+  };
+  return Math.round((toTime(b) - toTime(a)) / (24 * 60 * 60 * 1000));
+}
+
+/** Days missed since the last active day (0 if active today or yesterday). */
+function missedDays(p: Progress, today: string): number {
+  return p.lastActiveDay ? Math.max(0, daysBetween(p.lastActiveDay, today) - 1) : 0;
+}
+
+/** Streak as it stands today: it lapses when more days were missed than freezes cover. */
 export function currentStreak(p: Progress, now = Date.now()): number {
-  const today = dayKey(now);
-  if (p.lastActiveDay === today || p.lastActiveDay === addDays(today, -1)) return p.streak;
-  return 0;
+  return missedDays(p, dayKey(now)) <= p.streakFreezes ? p.streak : 0;
 }
 
 export function xpToday(p: Progress, now = Date.now()): number {
@@ -136,14 +160,15 @@ export interface Reward {
   gems: number;
   heartsRestored: number;
   streakExtended: boolean;
+  freezesUsed: number;
 }
 
 export function rewardFor(result: SessionResult): Reward {
   const perfect = result.accuracy >= 1;
   if (result.lessonId) {
-    return { xp: 10 + (perfect ? 5 : 0), gems: perfect ? 10 : 5, heartsRestored: 0, streakExtended: false };
+    return { xp: 10 + (perfect ? 5 : 0), gems: perfect ? 10 : 5, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
   }
-  return { xp: 8 + (perfect ? 2 : 0), gems: 2, heartsRestored: 1, streakExtended: false };
+  return { xp: 8 + (perfect ? 2 : 0), gems: 2, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
 }
 
 /** Record a finished lesson or drill: XP, gems, streak, lesson stats. */
@@ -152,8 +177,16 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
   const reward = rewardFor(result);
 
   let streak = p.streak;
+  let streakFreezes = p.streakFreezes;
   if (p.lastActiveDay !== today) {
-    streak = p.lastActiveDay === addDays(today, -1) ? p.streak + 1 : 1;
+    const missed = missedDays(p, today);
+    if (p.lastActiveDay && missed <= streakFreezes) {
+      streak = p.streak + 1;
+      streakFreezes -= missed;
+      reward.freezesUsed = missed;
+    } else {
+      streak = 1;
+    }
     reward.streakExtended = true;
   }
 
@@ -176,6 +209,7 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     xp: p.xp + reward.xp,
     gems: p.gems + reward.gems,
     streak,
+    streakFreezes,
     longestStreak: Math.max(p.longestStreak, streak),
     lastActiveDay: today,
     xpByDay: { ...p.xpByDay, [today]: (p.xpByDay[today] ?? 0) + reward.xp },
@@ -184,6 +218,21 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     drillsCompleted: p.drillsCompleted + (result.lessonId ? 0 : 1),
   };
   return { progress, reward };
+}
+
+export function buyStreakFreeze(p: Progress): Progress {
+  if (p.gems < STREAK_FREEZE_GEM_COST || p.streakFreezes >= MAX_STREAK_FREEZES) return p;
+  return { ...p, gems: p.gems - STREAK_FREEZE_GEM_COST, streakFreezes: p.streakFreezes + 1 };
+}
+
+export function recordMistake(p: Progress, ref: string): Progress {
+  if (p.reviewQueue.includes(ref)) return p;
+  return { ...p, reviewQueue: [...p.reviewQueue, ref].slice(-MAX_REVIEW_ITEMS) };
+}
+
+export function clearMistake(p: Progress, ref: string): Progress {
+  if (!p.reviewQueue.includes(ref)) return p;
+  return { ...p, reviewQueue: p.reviewQueue.filter((r) => r !== ref) };
 }
 
 export interface Achievement {

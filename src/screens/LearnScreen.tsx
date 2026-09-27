@@ -77,7 +77,7 @@ export function LearnScreen({ progress, now, onStartLesson }: Props) {
                 return (
                   <div
                     key={lesson.id}
-                    className="path-node-wrap"
+                    className={`path-node-wrap ${open ? "open" : ""}`}
                     style={{ transform: `translateX(${offset}px)` }}
                     ref={isCurrent ? currentRef : undefined}
                   >

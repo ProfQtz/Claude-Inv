@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { LESSON_ORDER } from "../course/course";
 import {
   buyHeartRefill,
+  buyStreakFreeze,
+  clearMistake,
   completeSession,
   currentStreak,
   HEART_REFILL_MS,
@@ -10,6 +12,7 @@ import {
   loseHeart,
   MAX_HEARTS,
   nextLessonId,
+  recordMistake,
   refillHearts,
 } from "./progress";
 import { accuracy, answer, isFinished, sessionProgress, startSession } from "./session";
@@ -96,5 +99,45 @@ describe("session", () => {
     expect(isFinished(s)).toBe(true);
     expect(accuracy(s)).toBeCloseTo(2 / 3);
     expect(s.mistakes).toBe(1);
+  });
+});
+
+describe("streak freezes", () => {
+  it("costs gems and caps at two", () => {
+    let p = { ...initialProgress(T0), gems: 1000 };
+    p = buyStreakFreeze(buyStreakFreeze(buyStreakFreeze(p)));
+    expect(p.streakFreezes).toBe(2);
+    expect(p.gems).toBe(600);
+  });
+
+  it("covers missed days", () => {
+    let p = { ...initialProgress(T0), gems: 1000 };
+    p = completeSession(p, { accuracy: 1 }, T0).progress;
+    p = buyStreakFreeze(buyStreakFreeze(p));
+    // Miss two days: both freezes are used and the streak continues.
+    expect(currentStreak(p, T0 + 3 * DAY)).toBe(1);
+    const { progress, reward } = completeSession(p, { accuracy: 1 }, T0 + 3 * DAY);
+    expect(progress.streak).toBe(2);
+    expect(progress.streakFreezes).toBe(0);
+    expect(reward.freezesUsed).toBe(2);
+  });
+
+  it("does not spend freezes when the gap is too long", () => {
+    let p = completeSession(initialProgress(T0), { accuracy: 1 }, T0).progress;
+    p = { ...p, streakFreezes: 1 };
+    expect(currentStreak(p, T0 + 3 * DAY)).toBe(0);
+    const next = completeSession(p, { accuracy: 1 }, T0 + 3 * DAY).progress;
+    expect(next.streak).toBe(1);
+    expect(next.streakFreezes).toBe(1);
+  });
+});
+
+describe("mistakes review", () => {
+  it("records each miss once and clears it", () => {
+    let p = initialProgress(T0);
+    p = recordMistake(recordMistake(p, "basics-1#0"), "basics-1#0");
+    p = recordMistake(p, "basics-2#3");
+    expect(p.reviewQueue).toEqual(["basics-1#0", "basics-2#3"]);
+    expect(clearMistake(p, "basics-1#0").reviewQueue).toEqual(["basics-2#3"]);
   });
 });

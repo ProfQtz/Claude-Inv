@@ -12,7 +12,9 @@ import {
   isReady,
   MatchView,
   OrderView,
+  ScenarioView,
 } from "../components/Exercises";
+import { playCue } from "../sound";
 import { HEART_REFILL_GEM_COST } from "../state/progress";
 import { accuracy, answer as answerSession, currentExercise, isFinished, sessionProgress, startSession } from "../state/session";
 
@@ -22,7 +24,10 @@ interface Props {
   /** null for unlimited-heart practice. */
   hearts: number | null;
   gems: number;
+  soundOn: boolean;
   onLoseHeart: () => void;
+  /** Called each time an exercise is graded, with its index in `exercises`. */
+  onResult?: (index: number, correct: boolean) => void;
   onBuyRefill: () => void;
   onQuit: () => void;
   onFinish: (result: { accuracy: number; durationMs: number; mistakes: number }) => void;
@@ -30,7 +35,18 @@ interface Props {
 
 const PRAISE = ["Nice!", "Great job!", "Correct!", "Nailed it!", "Ship it!", "Excellent!"];
 
-export function LessonScreen({ title, exercises, hearts, gems, onLoseHeart, onBuyRefill, onQuit, onFinish }: Props) {
+export function LessonScreen({
+  title,
+  exercises,
+  hearts,
+  gems,
+  soundOn,
+  onLoseHeart,
+  onResult,
+  onBuyRefill,
+  onQuit,
+  onFinish,
+}: Props) {
   const [session, setSession] = useState(() => startSession(exercises.length));
   const [answer, setAnswer] = useState<Answer>(null);
   const [checked, setChecked] = useState<null | { correct: boolean }>(null);
@@ -54,9 +70,12 @@ export function LessonScreen({ title, exercises, hearts, gems, onLoseHeart, onBu
       if (!exercise || checked) return;
       const correct = forceCorrect ?? grade(exercise, answer);
       setChecked({ correct });
+      // Scenarios already played a cue for each street.
+      if (soundOn && exercise.type !== "scenario") playCue(correct ? "correct" : "wrong");
       if (!correct && hearts !== null) onLoseHeart();
+      onResult?.(index!, correct);
     },
-    [exercise, checked, answer, hearts, onLoseHeart],
+    [exercise, checked, answer, hearts, index, soundOn, onLoseHeart, onResult],
   );
 
   const next = useCallback(() => {
@@ -80,9 +99,13 @@ export function LessonScreen({ title, exercises, hearts, gems, onLoseHeart, onBu
     function onKey(e: KeyboardEvent) {
       if (confirmQuit || outOfHearts || !exercise) return;
       if (e.key === "Enter") {
-        e.preventDefault();
-        if (checked) next();
-        else if (isReady(exercise, answer)) check();
+        if (checked) {
+          e.preventDefault();
+          next();
+        } else if (isReady(exercise, answer)) {
+          e.preventDefault();
+          check();
+        }
         return;
       }
       const n = Number(e.key);
@@ -134,13 +157,26 @@ export function LessonScreen({ title, exercises, hearts, gems, onLoseHeart, onBu
           <OrderView exercise={exercise} answer={answer} onAnswer={setAnswer} locked={!!checked} />
         )}
         {exercise.type === "match" && <MatchView exercise={exercise} onComplete={() => check(true)} />}
+        {exercise.type === "scenario" && (
+          <ScenarioView
+            exercise={exercise}
+            onStepResult={(correct) => soundOn && playCue(correct ? "correct" : "wrong")}
+            onComplete={(correct) => check(correct)}
+          />
+        )}
       </main>
 
       <footer className={`lesson-footer ${checked ? (checked.correct ? "correct" : "wrong") : ""}`}>
         <div className="footer-inner">
           {checked ? (
             <div className="feedback" role="status">
-              <strong>{checked.correct ? `✔ ${praise}` : "✘ Not quite"}</strong>
+              <strong>
+                {checked.correct
+                  ? `✔ ${exercise.type === "scenario" ? "Well played!" : praise}`
+                  : exercise.type === "scenario"
+                    ? "✘ Some decisions to review. This hand will come back."
+                    : "✘ Not quite"}
+              </strong>
               {!checked.correct && correctAnswerText(exercise) && (
                 <p className="correct-answer">Correct answer: {correctAnswerText(exercise)}</p>
               )}
@@ -148,7 +184,11 @@ export function LessonScreen({ title, exercises, hearts, gems, onLoseHeart, onBu
             </div>
           ) : (
             <span className="footer-hint">
-              {exercise.type === "match" ? "Tap the matching pairs" : "Press Enter to check"}
+              {exercise.type === "match"
+                ? "Tap the matching pairs"
+                : exercise.type === "scenario"
+                  ? "Make a decision on each street"
+                  : "Press Enter to check"}
             </span>
           )}
           {checked ? (
@@ -156,7 +196,8 @@ export function LessonScreen({ title, exercises, hearts, gems, onLoseHeart, onBu
               Continue
             </button>
           ) : (
-            exercise.type !== "match" && (
+            exercise.type !== "match" &&
+            exercise.type !== "scenario" && (
               <button className="btn btn-green" disabled={!isReady(exercise, answer)} onClick={() => check()}>
                 Check
               </button>

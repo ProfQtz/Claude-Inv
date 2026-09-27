@@ -6,6 +6,7 @@ interface Props {
   progress: Progress;
   now: number;
   onSetGoal: (xp: number) => void;
+  onToggleSound: () => void;
   onReset: () => void;
 }
 
@@ -18,7 +19,7 @@ const GOALS = [
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function ProfileScreen({ progress, now, onSetGoal, onReset }: Props) {
+export function ProfileScreen({ progress, now, onSetGoal, onToggleSound, onReset }: Props) {
   const [confirmReset, setConfirmReset] = useState(false);
   const lvl = level(progress);
   const completed = LESSON_ORDER.filter((id) => isLessonComplete(progress, id)).length;
@@ -114,6 +115,15 @@ export function ProfileScreen({ progress, now, onSetGoal, onReset }: Props) {
           </button>
         ))}
       </div>
+
+      <h2>Settings</h2>
+      <label className="toggle-row">
+        <span>
+          <strong>Sound effects</strong>
+          <small>Chimes for right and wrong answers</small>
+        </span>
+        <input type="checkbox" role="switch" checked={progress.soundOn} onChange={onToggleSound} />
+      </label>
 
       <button className="btn btn-ghost danger reset" onClick={() => setConfirmReset(true)}>
         Reset all progress

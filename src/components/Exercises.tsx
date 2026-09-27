@@ -1,6 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveCompare } from "../course/generator";
-import type { ChoiceExercise, CompareExercise, Exercise, MatchExercise, OrderExercise } from "../course/types";
+import type {
+  ChoiceExercise,
+  CompareExercise,
+  Exercise,
+  MatchExercise,
+  OrderExercise,
+  ScenarioExercise,
+  TableInfo,
+} from "../course/types";
 import { describeHand } from "../poker/evaluator";
 import { shuffle } from "../poker/cards";
 import { CardRow } from "./PlayingCard";
@@ -34,6 +42,8 @@ export function grade(exercise: Exercise, answer: Answer): boolean {
     case "order":
       return Array.isArray(answer) && answer.every((item, i) => item === exercise.items[i]);
     case "match":
+    case "scenario":
+      // Self-grading views report their own result.
       return true;
   }
 }
@@ -45,6 +55,8 @@ export function feedbackText(exercise: Exercise): string {
       return exercise.explanation;
     case "match":
       return "All pairs matched!";
+    case "scenario":
+      return exercise.summary;
     case "compare": {
       const { winner, hands } = resolveCompare(exercise);
       const summary = `A: ${describeHand(hands[0])} · B: ${describeHand(hands[1])}.`;
@@ -63,8 +75,22 @@ export function correctAnswerText(exercise: Exercise): string | null {
     case "order":
       return exercise.items.join(" › ");
     case "match":
+    case "scenario":
       return null;
   }
+}
+
+function TableInfoList({ info }: { info: TableInfo[] }) {
+  return (
+    <dl className="table-info">
+      {info.map((i) => (
+        <div key={i.label}>
+          <dt>{i.label}</dt>
+          <dd>{i.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 interface ViewProps<E extends Exercise> {
@@ -98,16 +124,7 @@ export function ChoiceView({ exercise, answer, onAnswer, locked, order }: ViewPr
       <h2 className="prompt">{exercise.prompt}</h2>
       {(exercise.hand || exercise.board || exercise.info) && (
         <div className="felt">
-          {exercise.info && (
-            <dl className="table-info">
-              {exercise.info.map((i) => (
-                <div key={i.label}>
-                  <dt>{i.label}</dt>
-                  <dd>{i.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
+          {exercise.info && <TableInfoList info={exercise.info} />}
           {exercise.board && (
             <div className="felt-section">
               {exercise.hand && <span className="felt-label">Board</span>}
@@ -289,6 +306,108 @@ export function MatchView({ exercise, onComplete }: { exercise: MatchExercise; o
         <div className="match-col">{left.map((v) => tile(v, "l"))}</div>
         <div className="match-col">{right.map((v) => tile(v, "r"))}</div>
       </div>
+    </div>
+  );
+}
+
+const STREETS = ["Preflop", "Flop", "Turn", "River"] as const;
+
+export function ScenarioView({
+  exercise,
+  onStepResult,
+  onComplete,
+}: {
+  exercise: ScenarioExercise;
+  onStepResult?: (correct: boolean) => void;
+  onComplete: (allCorrect: boolean) => void;
+}) {
+  const [stepIndex, setStepIndex] = useState(0);
+  const [choice, setChoice] = useState<number | null>(null);
+  const [results, setResults] = useState<boolean[]>([]);
+  const [finished, setFinished] = useState(false);
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  const step = exercise.steps[stepIndex];
+  const last = stepIndex === exercise.steps.length - 1;
+  const locked = choice !== null;
+
+  function choose(option: number) {
+    if (locked) return;
+    const correct = option === step.answer;
+    setChoice(option);
+    setResults([...results, correct]);
+    onStepResult?.(correct);
+  }
+
+  useEffect(() => {
+    if (choice !== null) feedbackRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+  }, [choice]);
+
+  function advance() {
+    if (last) {
+      setFinished(true);
+      onComplete(results.every(Boolean));
+      return;
+    }
+    setStepIndex(stepIndex + 1);
+    setChoice(null);
+  }
+
+  return (
+    <div className="exercise">
+      <h2 className="prompt">{exercise.prompt}</h2>
+      <ol className="street-track" aria-label="Streets">
+        {STREETS.map((street) => {
+          const i = exercise.steps.findIndex((s) => s.street === street);
+          const state = i < 0 ? "skipped" : i < stepIndex || (i === stepIndex && locked) ? (results[i] ? "right" : "missed") : i === stepIndex ? "active" : "";
+          return (
+            <li key={street} className={state}>
+              {street}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="felt">
+        <TableInfoList info={[...exercise.setup, ...(step.info ?? [])]} />
+        {step.board && (
+          <div className="felt-section">
+            <span className="felt-label">Board</span>
+            <CardRow cards={step.board} />
+          </div>
+        )}
+        <div className="felt-section">
+          <span className="felt-label">Your hand</span>
+          <CardRow cards={exercise.hand} />
+        </div>
+      </div>
+      <p className="step-prompt">{step.prompt}</p>
+      <div className="options">
+        {step.options.map((label, i) => (
+          <OptionButton
+            key={label}
+            index={i}
+            label={label}
+            selected={choice === i}
+            disabled={locked}
+            state={locked && i === step.answer ? "correct" : locked && choice === i ? "wrong" : undefined}
+            onClick={() => choose(i)}
+          />
+        ))}
+      </div>
+      {locked && (
+        <div
+          ref={feedbackRef}
+          className={`step-feedback ${choice === step.answer ? "correct" : "wrong"}`}
+          role="status"
+        >
+          <strong>{choice === step.answer ? "✔ Good decision" : "✘ Better: " + step.options[step.answer]}</strong>
+          <p>{step.explanation}</p>
+          {!finished && (
+            <button className="btn btn-blue" onClick={advance} autoFocus>
+              {last ? "Finish hand" : `Deal the ${exercise.steps[stepIndex + 1].street.toLowerCase()}`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

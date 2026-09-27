@@ -42,7 +42,32 @@ export interface MatchExercise {
   pairs: [string, string][];
 }
 
-export type Exercise = ChoiceExercise | CompareExercise | OrderExercise | MatchExercise;
+export type Street = "Preflop" | "Flop" | "Turn" | "River";
+
+/** One decision point in a hand. `board` is the full board so far on that street. */
+export interface ScenarioStep {
+  street: Street;
+  board?: CardList;
+  info?: TableInfo[];
+  prompt: string;
+  options: string[];
+  answer: number;
+  explanation: string;
+}
+
+/** Play a hand street by street, making a decision at each step. */
+export interface ScenarioExercise {
+  type: "scenario";
+  prompt: string;
+  hand: CardList;
+  /** Shown throughout the hand, e.g. position and stack sizes. */
+  setup: TableInfo[];
+  steps: ScenarioStep[];
+  /** Takeaway shown once the hand is over. */
+  summary: string;
+}
+
+export type Exercise = ChoiceExercise | CompareExercise | OrderExercise | MatchExercise | ScenarioExercise;
 
 export interface Lesson {
   id: string;

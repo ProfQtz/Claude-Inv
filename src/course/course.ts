@@ -1,4 +1,5 @@
-import type { Unit } from "./types";
+import { POSTFLOP_UNIT, TOURNAMENT_UNIT } from "./advanced";
+import type { Exercise, Unit } from "./types";
 
 const RANKING_ORDER = [
   "Royal Flush",
@@ -1184,6 +1185,7 @@ export const COURSE: Unit[] = [
       },
     ],
   },
+  POSTFLOP_UNIT,
   {
     id: "strategy",
     title: "Strategy & Mindset",
@@ -1334,6 +1336,7 @@ export const COURSE: Unit[] = [
       },
     ],
   },
+  TOURNAMENT_UNIT,
 ];
 
 export function findLesson(lessonId: string) {
@@ -1346,3 +1349,13 @@ export function findLesson(lessonId: string) {
 
 /** All lesson ids in course order — lessons unlock one after another. */
 export const LESSON_ORDER: string[] = COURSE.flatMap((u) => u.lessons.map((l) => l.id));
+
+/** Reference to a course exercise, used by the mistakes review: "lessonId#index". */
+export function exerciseRef(lessonId: string, index: number): string {
+  return `${lessonId}#${index}`;
+}
+
+export function exerciseByRef(ref: string): Exercise | undefined {
+  const [lessonId, index] = ref.split("#");
+  return findLesson(lessonId)?.lesson.exercises[Number(index)];
+}

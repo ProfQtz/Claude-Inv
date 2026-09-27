@@ -382,6 +382,11 @@ h4 {
   align-items: center;
 }
 
+/* The offset transform creates a stacking context; lift the open node above later units. */
+.path-node-wrap.open {
+  z-index: 20;
+}
+
 .path-node {
   width: 72px;
   height: 66px;
@@ -1366,4 +1371,165 @@ h4 {
 .option.wrong .option-key {
   border-color: var(--red);
   color: var(--red-dark);
+}
+
+/* ---------- Scenarios ---------- */
+
+.street-track {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.street-track li {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 10px;
+  background: var(--locked);
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.street-track li.active {
+  background: var(--blue);
+  color: #fff;
+}
+
+.street-track li.right {
+  background: var(--green);
+  color: #fff;
+}
+
+.street-track li.missed {
+  background: var(--red);
+  color: #fff;
+}
+
+.street-track li.skipped {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.step-prompt {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.step-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  animation: pop 0.2s ease-out;
+}
+
+.step-feedback p {
+  margin: 0 0 6px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.step-feedback.correct {
+  background: var(--green-light);
+  color: var(--green-dark);
+}
+
+.step-feedback.wrong {
+  background: var(--red-light);
+  color: var(--red-dark);
+}
+
+/* ---------- Review & shop ---------- */
+
+.drill-card:disabled {
+  opacity: 0.6;
+}
+
+.review-badge {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-weight: 900;
+}
+
+.shop h1 {
+  font-size: 1.6rem;
+}
+
+.shop > p {
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.gem-count {
+  color: var(--blue);
+}
+
+.shop-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 2px solid var(--border);
+}
+
+.shop-icon {
+  font-size: 2.4rem;
+}
+
+.shop-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shop-text span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.shop-item .btn {
+  min-width: 96px;
+  padding: 0 14px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.toggle-row span {
+  display: flex;
+  flex-direction: column;
+}
+
+.toggle-row small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.toggle-row input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--green);
 }

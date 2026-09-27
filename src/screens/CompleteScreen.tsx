@@ -19,7 +19,7 @@ export function CompleteScreen({ title, reward, accuracy, durationMs, streak, on
   return (
     <div className="complete">
       <div className="complete-hero">{perfect ? "💎" : "🎉"}</div>
-      <h1>{perfect ? "Perfect lesson!" : "Lesson complete!"}</h1>
+      <h1>{perfect ? "Perfect!" : "Complete!"}</h1>
       <p className="muted">{title}</p>
       <div className="stat-tiles">
         <div className="tile-stat gold">
@@ -39,6 +39,11 @@ export function CompleteScreen({ title, reward, accuracy, durationMs, streak, on
         <li>💎 +{reward.gems} gems</li>
         {reward.heartsRestored > 0 && <li>❤️ +{reward.heartsRestored} heart</li>}
         {reward.streakExtended && <li>🔥 {streak}-day streak!</li>}
+        {reward.freezesUsed > 0 && (
+          <li>
+            🧊 {reward.freezesUsed} streak freeze{reward.freezesUsed > 1 ? "s" : ""} used
+          </li>
+        )}
       </ul>
       <button className="btn btn-green wide" onClick={onContinue} autoFocus>
         Continue

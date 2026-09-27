@@ -5,16 +5,23 @@ path, hearts, XP, streaks, gems and endless practice drills.
 
 ## Features
 
-- **Course path** — 7 units, 23 lessons: card basics, hand rankings, how Hold'em
-  works, showdowns, starting hands, outs & pot odds, and strategy & mindset.
+- **Course path** — 9 units, 28 lessons: card basics, hand rankings, how Hold'em
+  works, showdowns, starting hands, outs & pot odds, post-flop play, strategy &
+  mindset, and tournament basics.
   Lessons unlock in order; each unit has a guidebook.
 - **Exercise types** — multiple choice (with cards on a felt table), "who wins?"
-  showdowns graded by a real hand evaluator, tap-to-order, and match-the-pairs.
+  showdowns graded by a real hand evaluator, tap-to-order, match-the-pairs, and
+  play-a-hand scenarios with a decision on every street.
 - **Duolingo mechanics** — wrong answers cost a heart and come back at the end of
   the lesson; hearts regenerate over time or can be refilled with gems; XP,
   daily goal, day streaks, levels and achievements.
 - **Practice** — randomly dealt drills (showdowns, name-that-hand, pot odds) with
   unlimited hearts; finishing one restores a heart.
+- **Mistakes review** — questions missed in lessons are queued for review and
+  cleared once answered correctly.
+- **Shop** — spend gems on streak freezes (each covers a missed day) and heart
+  refills.
+- Sound effects, with a toggle on the Profile page.
 - Progress is saved in `localStorage`. Keyboard: number keys pick an answer,
   Enter checks / continues.
 
@@ -35,5 +42,5 @@ src/
   course/      course content, exercise types, random drill generator
   state/       progress rules (XP, hearts, streaks), lesson session queue
   components/  playing cards, exercise views, top bar
-  screens/     Learn path, Lesson, Complete, Practice, Profile
+  screens/     Learn path, Lesson, Complete, Practice, Shop, Profile
 ```

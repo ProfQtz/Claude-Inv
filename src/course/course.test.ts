@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseCards } from "../poker/cards";
-import { COURSE, LESSON_ORDER } from "./course";
+import { COURSE, exerciseByRef, exerciseRef, LESSON_ORDER } from "./course";
 import { generateDrill, resolveCompare } from "./generator";
 import type { Exercise } from "./types";
 
@@ -9,6 +9,10 @@ const allExercises = COURSE.flatMap((u) => u.lessons.flatMap((l) => l.exercises.
 function cardsIn(e: Exercise): string[] {
   if (e.type === "compare") return [e.board, ...e.hands].join(" ").split(" ");
   if (e.type === "choice") return [e.hand, e.board].filter(Boolean).join(" ").split(" ").filter(Boolean);
+  if (e.type === "scenario") {
+    const finalBoard = e.steps.map((s) => s.board).filter(Boolean).pop() ?? "";
+    return [e.hand, finalBoard].join(" ").split(" ").filter(Boolean);
+  }
   return [];
 }
 
@@ -30,6 +34,24 @@ function checkExercise(e: Exercise) {
       expect(e.items.length).toBeGreaterThan(1);
       expect(new Set(e.items).size).toBe(e.items.length);
       break;
+    case "scenario": {
+      const streets = ["Preflop", "Flop", "Turn", "River"];
+      const boardSizes = { Preflop: 0, Flop: 3, Turn: 4, River: 5 };
+      let lastStreet = -1;
+      let lastBoard = "";
+      for (const step of e.steps) {
+        expect(step.answer).toBeGreaterThanOrEqual(0);
+        expect(step.answer).toBeLessThan(step.options.length);
+        // Streets move forward and each board extends the previous one.
+        expect(streets.indexOf(step.street)).toBeGreaterThan(lastStreet);
+        lastStreet = streets.indexOf(step.street);
+        const board = step.board ?? "";
+        expect(board.split(" ").filter(Boolean)).toHaveLength(boardSizes[step.street]);
+        expect(board.startsWith(lastBoard)).toBe(true);
+        lastBoard = board;
+      }
+      break;
+    }
     case "match":
       expect(new Set(e.pairs.map((p) => p[0])).size).toBe(e.pairs.length);
       expect(new Set(e.pairs.map((p) => p[1])).size).toBe(e.pairs.length);
@@ -72,5 +94,13 @@ describe("drill generator", () => {
 
   it.each(["showdown", "handName", "potOdds", "mixed"] as const)("generates valid %s drills", (kind) => {
     for (let i = 0; i < 25; i++) generateDrill(kind, 6, random).forEach(checkExercise);
+  });
+});
+
+describe("exercise refs", () => {
+  it("round-trips a ref to its exercise", () => {
+    const lesson = COURSE[1].lessons[2];
+    expect(exerciseByRef(exerciseRef(lesson.id, 3))).toBe(lesson.exercises[3]);
+    expect(exerciseByRef("missing#0")).toBeUndefined();
   });
 });
