@@ -8,7 +8,7 @@ import { shuffle } from "../poker/cards";
 
 export const SPEED_ROUND_MS = 60_000;
 /** Skills quick enough to answer in a few seconds. */
-const SPEED_SKILLS: Skill[] = ["showdown", "handName", "nuts", "potOdds"];
+const SPEED_SKILLS: Skill[] = ["showdown", "handName", "nuts", "potOdds", "preflop"];
 const PAUSE_CORRECT_MS = 450;
 const PAUSE_WRONG_MS = 1500;
 
@@ -118,7 +118,7 @@ export function SpeedRoundScreen({ best, soundOn, onSkillResult, onRoundEnd, onQ
         <span className="eyebrow">Speed Round</span>
         <h1>60 seconds. Read fast.</h1>
         <p className="muted">
-          Showdowns, hand reading, the nuts and pot odds, dealt one after another. Answers lock in the moment you tap,
+          Showdowns, hand reading, the nuts, pot odds and preflop opens, dealt one after another. Answers lock in the moment you tap,
           and number keys work too. No hearts at stake.
         </p>
         {best > 0 && (

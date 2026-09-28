@@ -7,7 +7,7 @@ export interface TableInfo {
 }
 
 /** Practice skills tracked for generated drill exercises. */
-export type Skill = "showdown" | "handName" | "potOdds" | "outs" | "nuts";
+export type Skill = "showdown" | "handName" | "potOdds" | "outs" | "nuts" | "preflop" | "equity";
 
 /** Pick one answer from a list. Used for trivia, hand reading, and fold/call/raise decisions. */
 export interface ChoiceExercise {
@@ -15,6 +15,8 @@ export interface ChoiceExercise {
   prompt: string;
   hand?: CardList;
   board?: CardList;
+  /** An opponent's revealed hole cards, shown on the table. */
+  villain?: CardList;
   info?: TableInfo[];
   options: string[];
   answer: number;

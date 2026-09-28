@@ -122,7 +122,7 @@ export function ChoiceView({ exercise, answer, onAnswer, locked, order }: ViewPr
   return (
     <div className="exercise">
       <h2 className="prompt">{exercise.prompt}</h2>
-      {(exercise.hand || exercise.board || exercise.info) && (
+      {(exercise.hand || exercise.board || exercise.info || exercise.villain) && (
         <div className="felt">
           {exercise.info && <TableInfoList info={exercise.info} />}
           {exercise.board && (
@@ -131,11 +131,24 @@ export function ChoiceView({ exercise, answer, onAnswer, locked, order }: ViewPr
               <CardRow cards={exercise.board} />
             </div>
           )}
-          {exercise.hand && (
-            <div className="felt-section">
-              {exercise.board && <span className="felt-label">Your hand</span>}
-              <CardRow cards={exercise.hand} />
+          {exercise.villain ? (
+            <div className="players">
+              <div className="player">
+                <span className="felt-label">Your hand</span>
+                <CardRow cards={exercise.hand ?? ""} />
+              </div>
+              <div className="player">
+                <span className="felt-label">Villain</span>
+                <CardRow cards={exercise.villain} />
+              </div>
             </div>
+          ) : (
+            exercise.hand && (
+              <div className="felt-section">
+                {exercise.board && <span className="felt-label">Your hand</span>}
+                <CardRow cards={exercise.hand} />
+              </div>
+            )
           )}
         </div>
       )}

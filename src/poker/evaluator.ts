@@ -171,3 +171,77 @@ export function describeHand(hand: HandValue): string {
       return `${valueName(k[0])} High`;
   }
 }
+
+const SUIT_INDEX = { s: 0, h: 1, d: 2, c: 3 } as const;
+
+/** Highest straight in a rank bit mask (bit v = rank value v), or 0. */
+function straightHighFromMask(mask: number): number {
+  for (let high = 14; high >= 5; high--) {
+    const run = 0b11111 << (high - 4);
+    if ((mask & run) === run) return high;
+  }
+  return (mask & WHEEL_MASK) === WHEEL_MASK ? 5 : 0;
+}
+
+/** Highest `n` rank values set in a mask, excluding `skip`. */
+function topRanks(mask: number, n: number, skip: number[] = []): number[] {
+  const out: number[] = [];
+  for (let v = 14; v >= 2 && out.length < n; v--) if (mask & (1 << v) && !skip.includes(v)) out.push(v);
+  return out;
+}
+
+function encode(category: HandCategory, kickers: number[]): number {
+  let score = category;
+  for (let i = 0; i < 5; i++) score = score * 16 + (kickers[i] ?? 0);
+  return score;
+}
+
+/**
+ * Fast numeric strength of the best five cards among 5–7 cards. Higher is better and equal
+ * means a tie, matching compareHands on evaluate(). Used by equity enumeration.
+ */
+export function score7(cards: Card[]): number {
+  const counts = new Array<number>(15).fill(0);
+  const suitMasks = [0, 0, 0, 0];
+  const suitCounts = [0, 0, 0, 0];
+  let mask = 0;
+  for (const c of cards) {
+    const v = RANK_VALUE[c.rank];
+    const s = SUIT_INDEX[c.suit];
+    counts[v]++;
+    mask |= 1 << v;
+    suitMasks[s] |= 1 << v;
+    suitCounts[s]++;
+  }
+
+  const flushSuit = suitCounts.findIndex((n) => n >= 5);
+  if (flushSuit >= 0) {
+    const sf = straightHighFromMask(suitMasks[flushSuit]);
+    if (sf) return encode(HandCategory.StraightFlush, [sf]);
+  }
+
+  const quads: number[] = [];
+  const trips: number[] = [];
+  const pairs: number[] = [];
+  for (let v = 14; v >= 2; v--) {
+    if (counts[v] === 4) quads.push(v);
+    else if (counts[v] === 3) trips.push(v);
+    else if (counts[v] === 2) pairs.push(v);
+  }
+
+  if (quads.length) return encode(HandCategory.FourOfAKind, [quads[0], ...topRanks(mask, 1, [quads[0]])]);
+  if (trips.length && (trips.length > 1 || pairs.length)) {
+    const pair = Math.max(trips[1] ?? 0, pairs[0] ?? 0);
+    return encode(HandCategory.FullHouse, [trips[0], pair]);
+  }
+  if (flushSuit >= 0) return encode(HandCategory.Flush, topRanks(suitMasks[flushSuit], 5));
+  const straight = straightHighFromMask(mask);
+  if (straight) return encode(HandCategory.Straight, [straight]);
+  if (trips.length) return encode(HandCategory.ThreeOfAKind, [trips[0], ...topRanks(mask, 2, [trips[0]])]);
+  if (pairs.length >= 2) {
+    const [a, b] = pairs;
+    return encode(HandCategory.TwoPair, [a, b, ...topRanks(mask, 1, [a, b])]);
+  }
+  if (pairs.length === 1) return encode(HandCategory.OnePair, [pairs[0], ...topRanks(mask, 3, [pairs[0]])]);
+  return encode(HandCategory.HighCard, topRanks(mask, 5));
+}

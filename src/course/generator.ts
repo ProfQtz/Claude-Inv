@@ -1,5 +1,7 @@
 import { Card, cardCode, fullDeck, parseCards, RANK_NAME, RANKS, shuffle, SUIT_SYMBOL } from "../poker/cards";
-import { CATEGORY_NAME, compareHands, describeHand, evaluate, HandCategory, type HandValue } from "../poker/evaluator";
+import { CATEGORY_NAME, compareHands, describeHand, evaluate, HandCategory, type HandValue, score7 } from "../poker/evaluator";
+import { exactEquity } from "../poker/equity";
+import { handLabel, OPENING_RANGES, OPENING_SETS, type Position, POSITIONS, rangePercent } from "../poker/ranges";
 import { formatPercent, hitProbability, potOdds, ruleOf2And4 } from "../poker/math";
 import type { ChoiceExercise, CompareExercise, Exercise, Skill } from "./types";
 
@@ -133,15 +135,16 @@ export function randomOuts(random: Random = Math.random): ChoiceExercise {
 export function findNuts(board: Card[]): { value: HandValue; hole: Card[] } {
   const seen = new Set(board.map(cardCode));
   const deck = fullDeck().filter((c) => !seen.has(cardCode(c)));
-  let best: { value: HandValue; hole: Card[] } | null = null;
+  let bestScore = -1;
+  let bestHole: Card[] = [];
   for (let i = 0; i < deck.length; i++) {
     for (let j = i + 1; j < deck.length; j++) {
       const hole = [deck[i], deck[j]];
-      const value = evaluate([...hole, ...board]);
-      if (!best || compareHands(value, best.value) > 0) best = { value, hole };
+      const score = score7([...hole, ...board]);
+      if (score > bestScore) [bestScore, bestHole] = [score, hole];
     }
   }
-  return best!;
+  return { value: evaluate([...bestHole, ...board]), hole: bestHole };
 }
 
 /** Full board: what's the best possible hand? */
@@ -158,12 +161,87 @@ export function randomNuts(random: Random = Math.random): ChoiceExercise {
   };
 }
 
+/** Pick a random element. */
+const pick = <T,>(items: readonly T[], random: Random): T => items[Math.floor(random() * items.length)];
+
+/** Folded to you: open-raise or fold, graded against the simplified opening chart. */
+export function randomPreflop(random: Random = Math.random): ChoiceExercise {
+  const position: Position = pick(POSITIONS, random).id;
+  const range = OPENING_SETS[position];
+  // Half the time deal a hand from the range so raises and folds come up about equally.
+  let hand: Card[];
+  let label: string;
+  const wantOpen = random() < 0.5;
+  do {
+    hand = shuffle(fullDeck(), random).slice(0, 2);
+    label = handLabel(hand[0], hand[1]);
+  } while (wantOpen && !range.has(label));
+  const open = range.has(label);
+  const name = POSITIONS.find((p) => p.id === position)!.name;
+  const pct = Math.round(rangePercent(range) * 100);
+  return {
+    type: "choice",
+    prompt: "Everyone folds to you. Open-raise or fold?",
+    hand: codes(hand),
+    info: [
+      { label: "Position", value: name },
+      { label: "Stacks", value: "100 BB" },
+    ],
+    options: ["Fold", "Raise"],
+    answer: open ? 1 : 0,
+    explanation: `${label} is ${open ? "in" : "outside"} the ${name} opening range, which plays about ${pct}% of hands: ${OPENING_RANGES[position]}.`,
+    skill: "preflop",
+  };
+}
+
+export const EQUITY_BUCKETS = [
+  { label: "Under 25%", max: 0.25 },
+  { label: "25–45%", max: 0.45 },
+  { label: "45–55%", max: 0.55 },
+  { label: "55–75%", max: 0.75 },
+  { label: "Over 75%", max: 1.01 },
+];
+const bucketOf = (e: number) => EQUITY_BUCKETS.findIndex((b) => e < b.max);
+/** Keep answers clear of bucket edges so rounding never decides the right answer. */
+const nearEdge = (e: number) => EQUITY_BUCKETS.some((b) => Math.abs(e - b.max) < 0.025);
+
+/** Hand vs hand on the flop: estimate hero's equity. */
+export function randomEquity(random: Random = Math.random): ChoiceExercise {
+  const target = Math.floor(random() * EQUITY_BUCKETS.length);
+  let chosen: { hero: Card[]; villain: Card[]; flop: Card[]; equity: ReturnType<typeof exactEquity> } | null = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const deck = shuffle(fullDeck(), random);
+    const [hero, villain, flop] = [deck.slice(0, 2), deck.slice(2, 4), deck.slice(4, 7)];
+    const equity = exactEquity(hero, villain, flop);
+    if (nearEdge(equity.equity)) continue;
+    chosen = { hero, villain, flop, equity };
+    if (bucketOf(equity.equity) === target) break;
+  }
+  if (!chosen) return randomEquity(random);
+  const { hero, villain, flop, equity } = chosen;
+  const heroNow = evaluate([...hero, ...flop]);
+  const villainNow = evaluate([...villain, ...flop]);
+  return {
+    type: "choice",
+    prompt: "All-in on the flop. What's your equity?",
+    hand: codes(hero),
+    board: codes(flop),
+    villain: codes(villain),
+    options: EQUITY_BUCKETS.map((b) => b.label),
+    answer: bucketOf(equity.equity),
+    explanation: `Exactly ${formatPercent(equity.equity)} over every turn and river (win ${formatPercent(equity.win)}, tie ${formatPercent(equity.tie)}). You have ${describeHand(heroNow)}; villain has ${describeHand(villainNow)}.`,
+    skill: "equity",
+  };
+}
+
 const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   showdown: randomCompare,
   handName: randomHandName,
   potOdds: randomPotOdds,
   outs: randomOuts,
   nuts: randomNuts,
+  preflop: randomPreflop,
+  equity: randomEquity,
 };
 
 export const SKILLS = Object.keys(MAKERS) as Skill[];
@@ -193,4 +271,25 @@ export function resolveCompare(exercise: CompareExercise): CompareResult {
   const [a, b] = exercise.hands.map((h) => evaluate([...parseCards(h), ...board]));
   const diff = compareHands(a, b);
   return { winner: diff > 0 ? 0 : diff < 0 ? 1 : -1, hands: [a, b] };
+}
+
+/** Deterministic random numbers from a string seed (mulberry32 over an FNV-1a hash). */
+export function seededRandom(seed: string): Random {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  let a = h >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export const DAILY_LENGTH = 10;
+
+/** The same ten hands for everyone on a given day. */
+export function dailyChallenge(day: string): Exercise[] {
+  return generateDrill("mixed", DAILY_LENGTH, seededRandom(`pokerlingo-daily-${day}`));
 }

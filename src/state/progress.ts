@@ -14,6 +14,14 @@ export const MAX_REVIEW_ITEMS = 40;
 export const SKILL_MIN_ATTEMPTS = 5;
 export const DRILL_LENGTHS = [5, 10, 20] as const;
 
+export const MAX_HISTORY = 20;
+
+export interface PracticeRecord {
+  day: string;
+  title: string;
+  accuracy: number;
+}
+
 export interface SkillRecord {
   attempts: number;
   correct: number;
@@ -46,6 +54,10 @@ export interface Progress {
   skills: Partial<Record<Skill, SkillRecord>>;
   speedBest: number;
   drillLength: number;
+  /** Day the daily challenge was last completed. */
+  dailyDone: string | null;
+  /** Most recent practice sessions, newest first. */
+  history: PracticeRecord[];
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -68,6 +80,8 @@ export function initialProgress(now = Date.now()): Progress {
     skills: {},
     speedBest: 0,
     drillLength: 10,
+    dailyDone: null,
+    history: [],
   };
 }
 
@@ -169,6 +183,9 @@ export interface SessionResult {
   lessonId?: string;
   /** Fraction of exercises answered correctly on the first try. */
   accuracy: number;
+  /** Shown in practice history. */
+  title?: string;
+  daily?: boolean;
 }
 
 export interface Reward {
@@ -181,6 +198,9 @@ export interface Reward {
 
 export function rewardFor(result: SessionResult): Reward {
   const perfect = result.accuracy >= 1;
+  if (result.daily) {
+    return { xp: 20 + (perfect ? 5 : 0), gems: 20, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
+  }
   if (result.lessonId) {
     return { xp: 10 + (perfect ? 5 : 0), gems: perfect ? 10 : 5, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
   }
@@ -232,6 +252,10 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     lessons,
     perfectLessons: p.perfectLessons + (result.lessonId && result.accuracy >= 1 ? 1 : 0),
     drillsCompleted: p.drillsCompleted + (result.lessonId ? 0 : 1),
+    dailyDone: result.daily ? today : p.dailyDone,
+    history: result.lessonId
+      ? p.history
+      : [{ day: today, title: result.title ?? "Practice", accuracy: result.accuracy }, ...p.history].slice(0, MAX_HISTORY),
   };
   return { progress, reward };
 }
@@ -272,6 +296,23 @@ export function recommendSkill(p: Progress, skills: readonly Skill[]): Skill {
     return unmeasured.reduce((a, b) => ((p.skills[b]?.attempts ?? 0) < (p.skills[a]?.attempts ?? 0) ? b : a));
   }
   return skills.reduce((a, b) => (skillAccuracy(p, b)! < skillAccuracy(p, a)! ? b : a));
+}
+
+export type Mastery = "Learning" | "Bronze" | "Silver" | "Gold";
+
+/** Mastery tiers need both volume and accuracy: 10/60%, 25/75%, 50/90%. */
+export function skillMastery(p: Progress, skill: Skill): Mastery {
+  const r = p.skills[skill];
+  if (!r) return "Learning";
+  const acc = r.correct / r.attempts;
+  if (r.attempts >= 50 && acc >= 0.9) return "Gold";
+  if (r.attempts >= 25 && acc >= 0.75) return "Silver";
+  if (r.attempts >= 10 && acc >= 0.6) return "Bronze";
+  return "Learning";
+}
+
+export function isDailyDone(p: Progress, now = Date.now()): boolean {
+  return p.dailyDone === dayKey(now);
 }
 
 export function recordSpeedRound(p: Progress, score: number): Progress {

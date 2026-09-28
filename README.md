@@ -15,10 +15,13 @@ path, hearts, XP, streaks, gems and endless practice drills.
 - **Duolingo mechanics** — wrong answers cost a heart and come back at the end of
   the lesson; hearts regenerate over time or can be refilled with gems; XP,
   daily goal, day streaks, levels and achievements.
-- **Practice** — randomly dealt drills for five skills (showdowns, name-that-hand,
-  pot odds, counting outs, finding the nuts) with unlimited hearts; finishing one
-  restores a heart. Per-skill accuracy drives a "recommended for you" drill, and
-  drills can be 5, 10 or 20 questions.
+- **Practice** — randomly dealt drills for seven skills (preflop opens, showdowns,
+  name-that-hand, finding the nuts, counting outs, hand-vs-hand equity, pot odds)
+  with unlimited hearts; finishing one restores a heart. Per-skill accuracy drives
+  a "recommended for you" drill and Bronze/Silver/Gold mastery badges; drills can
+  be 5, 10 or 20 questions, and recent sessions are listed.
+- **Daily Challenge** — the same ten hands for everyone each day, for bonus gems.
+- **Opening ranges** — a 13×13 chart of simplified 6-max opening ranges per seat.
 - **Speed Round** — 60 seconds of quick reads with a saved personal best.
 - **Mistakes review** — questions missed in lessons are queued for review and
   cleared once answered correctly.

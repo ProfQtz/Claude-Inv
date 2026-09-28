@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { exerciseByRef, exerciseRef, findLesson } from "./course/course";
-import { type DrillKind, generateDrill } from "./course/generator";
+import { dailyChallenge, type DrillKind, generateDrill } from "./course/generator";
 import type { Exercise, Skill } from "./course/types";
 import { BottomNav, RightRail, Sidebar, type Tab, TopBar } from "./components/Shell";
 import { playCue } from "./sound";
@@ -10,6 +10,7 @@ import {
   clearMistake,
   completeSession,
   currentStreak,
+  dayKey,
   loseHeart,
   recordMistake,
   recordSkill,
@@ -23,6 +24,7 @@ import { LessonScreen } from "./screens/LessonScreen";
 import { DRILL_TITLES, PracticeScreen } from "./screens/PracticeScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { ShopScreen } from "./screens/ShopScreen";
+import { RangesScreen } from "./screens/RangesScreen";
 import { SpeedRoundScreen } from "./screens/SpeedRoundScreen";
 
 interface ActiveSession {
@@ -34,6 +36,7 @@ interface ActiveSession {
   /** Course exercise refs, parallel to `exercises`, for lessons and reviews. */
   refs?: string[];
   review?: boolean;
+  daily?: boolean;
 }
 
 interface Completion {
@@ -51,6 +54,12 @@ export default function App() {
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
   const [speedRound, setSpeedRound] = useState(false);
+  const [rangesOpen, setRangesOpen] = useState(false);
+
+  function switchTab(next: Tab) {
+    setTab(next);
+    setRangesOpen(false);
+  }
 
   function startLesson(lessonId: string) {
     const found = findLesson(lessonId);
@@ -69,6 +78,10 @@ export default function App() {
     setSession({ id: Date.now(), title: DRILL_TITLES[kind], exercises: generateDrill(kind, progress.drillLength) });
   }
 
+  function startDaily() {
+    setSession({ id: Date.now(), title: "Daily Challenge", exercises: dailyChallenge(dayKey(Date.now())), daily: true });
+  }
+
   function startReview() {
     const items = progress.reviewQueue
       .map((ref) => ({ ref, exercise: exerciseByRef(ref) }))
@@ -84,8 +97,8 @@ export default function App() {
     });
   }
 
-  function finishSession(title: string, lessonId: string | undefined, accuracy: number, durationMs: number) {
-    const result = { lessonId, accuracy };
+  function finishSession(title: string, lessonId: string | undefined, accuracy: number, durationMs: number, daily = false) {
+    const result = { lessonId, accuracy, title, daily };
     const { reward } = completeSession(progress, result);
     update((p) => completeSession(p, result).progress);
     if (progress.soundOn) playCue("complete");
@@ -151,7 +164,7 @@ export default function App() {
           onBuyRefill={() => update((p) => buyHeartRefill(p))}
           onQuit={() => setSession(null)}
           onFinish={({ accuracy, durationMs }) => {
-            finishSession(session.title, session.lessonId, accuracy, durationMs);
+            finishSession(session.title, session.lessonId, accuracy, durationMs, session.daily);
             setSession(null);
           }}
         />
@@ -161,18 +174,25 @@ export default function App() {
 
   return (
     <div className="app shell">
-      <Sidebar tab={tab} onTab={setTab} />
+      <Sidebar tab={tab} onTab={switchTab} />
       <TopBar progress={progress} now={now} />
       <main className="content">
         {tab === "learn" && <LearnScreen progress={progress} now={now} onStartLesson={startLesson} />}
         {tab === "practice" && (
-          <PracticeScreen
-            progress={progress}
-            onStart={startDrill}
-            onStartReview={startReview}
-            onStartSpeed={() => setSpeedRound(true)}
-            onSetLength={(n) => update((p) => ({ ...p, drillLength: n }))}
-          />
+          rangesOpen ? (
+            <RangesScreen onBack={() => setRangesOpen(false)} />
+          ) : (
+            <PracticeScreen
+              progress={progress}
+              now={now}
+              onStart={startDrill}
+              onStartDaily={startDaily}
+              onStartReview={startReview}
+              onStartSpeed={() => setSpeedRound(true)}
+              onOpenRanges={() => setRangesOpen(true)}
+              onSetLength={(n) => update((p) => ({ ...p, drillLength: n }))}
+            />
+          )
         )}
         {tab === "shop" && (
           <ShopScreen
@@ -192,7 +212,7 @@ export default function App() {
         )}
       </main>
       <RightRail progress={progress} now={now} onContinue={startLesson} />
-      <BottomNav tab={tab} onTab={setTab} />
+      <BottomNav tab={tab} onTab={switchTab} />
     </div>
   );
 }

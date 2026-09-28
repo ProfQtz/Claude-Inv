@@ -23,6 +23,9 @@ import {
   Zap,
   Timer,
   Gauge,
+  Grid3x3,
+  Percent,
+  CalendarCheck,
 } from "lucide-react";
 
 /** Icons referenced by name from course data, drills and achievements. */
@@ -50,6 +53,9 @@ export const ICONS: Record<string, LucideIcon> = {
   zap: Zap,
   timer: Timer,
   gauge: Gauge,
+  grid: Grid3x3,
+  percent: Percent,
+  "calendar-check": CalendarCheck,
 };
 
 export function NamedIcon({ name, size = 20, strokeWidth = 2 }: { name: string; size?: number; strokeWidth?: number }) {

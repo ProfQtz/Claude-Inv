@@ -1,15 +1,18 @@
-import { ChevronRight, Heart, Play, Timer, Trophy } from "lucide-react";
+import { CalendarCheck, Check, ChevronRight, Gem, Heart, Play, Timer, Trophy } from "lucide-react";
 import type { CSSProperties } from "react";
-import { type DrillKind, SKILLS } from "../course/generator";
+import { DAILY_LENGTH, type DrillKind, SKILLS } from "../course/generator";
 import type { Skill } from "../course/types";
 import { NamedIcon } from "../components/Icons";
 import {
+  dayKey,
   DRILL_LENGTHS,
+  isDailyDone,
   MAX_HEARTS,
   Progress,
   recommendSkill,
   SKILL_MIN_ATTEMPTS,
   skillAccuracy,
+  skillMastery,
 } from "../state/progress";
 
 interface DrillInfo {
@@ -20,6 +23,12 @@ interface DrillInfo {
 }
 
 export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
+  preflop: {
+    title: "Open or Fold",
+    description: "Preflop opening decisions from every seat.",
+    icon: "hand",
+    color: "#7156d9",
+  },
   showdown: {
     title: "Showdown",
     description: "Random boards. Pick the winning hand.",
@@ -32,11 +41,11 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
     icon: "trophy",
     color: "#2f6fde",
   },
-  potOdds: {
-    title: "Pot Odds",
-    description: "Turn bet sizes into the equity you need.",
-    icon: "calculator",
-    color: "#4957c9",
+  nuts: {
+    title: "Find the Nuts",
+    description: "Spot the best possible hand on the river.",
+    icon: "crosshair",
+    color: "#0f8b8d",
   },
   outs: {
     title: "Count Your Outs",
@@ -44,19 +53,28 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
     icon: "target",
     color: "#c8435e",
   },
-  nuts: {
-    title: "Find the Nuts",
-    description: "Spot the best possible hand on the river.",
-    icon: "crosshair",
-    color: "#0f8b8d",
+  equity: {
+    title: "Hand vs Hand",
+    description: "Estimate your all-in equity on the flop.",
+    icon: "percent",
+    color: "#a14b8c",
+  },
+  potOdds: {
+    title: "Pot Odds",
+    description: "Turn bet sizes into the equity you need.",
+    icon: "calculator",
+    color: "#4957c9",
   },
   mixed: {
     title: "Mixed Session",
-    description: "All five skills, for daily reps.",
+    description: "Every skill, for daily reps.",
     icon: "dice",
     color: "#0e7c58",
   },
 };
+
+/** Skills in the order they appear on the Practice tab: preflop to river to math. */
+const SKILL_ORDER: Skill[] = ["preflop", "showdown", "handName", "nuts", "outs", "equity", "potOdds"];
 
 export const DRILL_TITLES: Record<DrillKind, string> = Object.fromEntries(
   Object.entries(DRILL_INFO).map(([k, v]) => [k, v.title]),
@@ -64,9 +82,12 @@ export const DRILL_TITLES: Record<DrillKind, string> = Object.fromEntries(
 
 interface Props {
   progress: Progress;
+  now: number;
   onStart: (kind: DrillKind) => void;
+  onStartDaily: () => void;
   onStartReview: () => void;
   onStartSpeed: () => void;
+  onOpenRanges: () => void;
   onSetLength: (length: number) => void;
 }
 
@@ -87,16 +108,27 @@ function SkillMeter({ progress, skill }: { progress: Progress; skill: Skill }) {
         <span style={{ width: `${accuracy * 100}%` }} />
       </span>
       <span className="num">{Math.round(accuracy * 100)}%</span>
+      <span className="muted num">· {attempts}</span>
     </span>
   );
 }
 
-export function PracticeScreen({ progress, onStart, onStartReview, onStartSpeed, onSetLength }: Props) {
+function formatDay(day: string, today: string) {
+  if (day === today) return "Today";
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+export function PracticeScreen(props: Props) {
+  const { progress, now, onStart, onStartDaily, onStartReview, onStartSpeed, onOpenRanges, onSetLength } = props;
   const reviewCount = progress.reviewQueue.length;
   const focus = recommendSkill(progress, SKILLS);
   const focusInfo = DRILL_INFO[focus];
   const focusAccuracy = skillAccuracy(progress, focus);
   const focusAttempts = progress.skills[focus]?.attempts ?? 0;
+  const dailyDone = isDailyDone(progress, now);
+  const todayDate = new Date(now);
+  const todayKey = dayKey(now);
 
   return (
     <div className="page">
@@ -109,6 +141,34 @@ export function PracticeScreen({ progress, onStart, onStartReview, onStartSpeed,
           </span>
         )}
       </header>
+
+      <section className={`daily-card ${dailyDone ? "done" : ""}`}>
+        <span className="daily-date" aria-hidden="true">
+          <span>{todayDate.toLocaleDateString(undefined, { month: "short" })}</span>
+          <strong className="num">{todayDate.getDate()}</strong>
+        </span>
+        <div className="daily-text">
+          <span className="eyebrow">Daily Challenge</span>
+          <strong>{dailyDone ? "Completed for today" : `${DAILY_LENGTH} hands, every skill`}</strong>
+          <span>
+            {dailyDone
+              ? "New hands tomorrow. Everyone gets the same deal each day."
+              : "Everyone gets the same deal today."}
+          </span>
+        </div>
+        {dailyDone ? (
+          <span className="daily-check" aria-label="Completed">
+            <Check size={22} strokeWidth={3} aria-hidden="true" />
+          </span>
+        ) : (
+          <button className="btn btn-primary" onClick={onStartDaily}>
+            Play
+            <span className="btn-reward">
+              <Gem size={14} aria-hidden="true" /> 20
+            </span>
+          </button>
+        )}
+      </section>
 
       <section className="focus-card" style={{ "--tile-color": focusInfo.color } as CSSProperties}>
         <div className="focus-text">
@@ -128,35 +188,33 @@ export function PracticeScreen({ progress, onStart, onStartReview, onStartSpeed,
         </button>
       </section>
 
-      <div className="practice-row">
-        <button className="review-card speed-card" onClick={onStartSpeed}>
-          <span className="icon-tile gold lg">
-            <Timer size={24} aria-hidden="true" />
+      <div className="tool-grid">
+        <button className="tool-card" onClick={onStartSpeed}>
+          <span className="icon-tile gold">
+            <Timer size={20} aria-hidden="true" />
           </span>
-          <span className="row-text">
-            <strong>Speed Round</strong>
-            <span>As many correct reads as you can in 60 seconds.</span>
-          </span>
+          <strong>Speed Round</strong>
+          <span>60 seconds of quick reads</span>
           {progress.speedBest > 0 && (
             <span className="best-badge num" title="Personal best">
-              <Trophy size={14} aria-hidden="true" /> {progress.speedBest}
+              <Trophy size={12} aria-hidden="true" /> {progress.speedBest}
             </span>
           )}
         </button>
-
-        <button className="review-card" disabled={reviewCount === 0} onClick={onStartReview}>
-          <span className="icon-tile orange lg">
-            <NamedIcon name="repeat" size={24} />
+        <button className="tool-card" disabled={reviewCount === 0} onClick={onStartReview}>
+          <span className="icon-tile orange">
+            <NamedIcon name="repeat" size={20} />
           </span>
-          <span className="row-text">
-            <strong>Review mistakes</strong>
-            <span>
-              {reviewCount === 0
-                ? "Questions you miss in lessons show up here."
-                : `${reviewCount} to revisit. A correct answer clears it.`}
-            </span>
+          <strong>Review mistakes</strong>
+          <span>{reviewCount === 0 ? "Nothing to review" : `${reviewCount} to revisit`}</span>
+          {reviewCount > 0 && <span className="count-badge num">{reviewCount}</span>}
+        </button>
+        <button className="tool-card" onClick={onOpenRanges}>
+          <span className="icon-tile brand">
+            <NamedIcon name="grid" size={20} />
           </span>
-          {reviewCount > 0 ? <span className="count-badge num">{reviewCount}</span> : null}
+          <strong>Opening ranges</strong>
+          <span>Chart for every seat</span>
         </button>
       </div>
 
@@ -178,8 +236,9 @@ export function PracticeScreen({ progress, onStart, onStartReview, onStartSpeed,
       </div>
 
       <div className="drill-grid">
-        {SKILLS.map((skill) => {
+        {SKILL_ORDER.map((skill) => {
           const d = DRILL_INFO[skill];
+          const mastery = skillMastery(progress, skill);
           return (
             <button
               key={skill}
@@ -191,7 +250,10 @@ export function PracticeScreen({ progress, onStart, onStartReview, onStartSpeed,
                 <NamedIcon name={d.icon} size={24} />
               </span>
               <span className="row-text">
-                <strong>{d.title}</strong>
+                <span className="drill-title">
+                  <strong>{d.title}</strong>
+                  {mastery !== "Learning" && <span className={`mastery ${mastery.toLowerCase()}`}>{mastery}</span>}
+                </span>
                 <span>{d.description}</span>
                 <SkillMeter progress={progress} skill={skill} />
               </span>
@@ -213,6 +275,30 @@ export function PracticeScreen({ progress, onStart, onStartReview, onStartSpeed,
           <ChevronRight className="row-chevron" size={20} aria-hidden="true" />
         </button>
       </div>
+      <p className="mastery-note">
+        Mastery: <span className="mastery bronze">Bronze</span> 10 answers at 60%,{" "}
+        <span className="mastery silver">Silver</span> 25 at 75%, <span className="mastery gold">Gold</span> 50 at 90%.
+      </p>
+
+      {progress.history.length > 0 && (
+        <>
+          <h2 className="section-title">Recent sessions</h2>
+          <ul className="history">
+            {progress.history.slice(0, 8).map((h, i) => (
+              <li key={i}>
+                <span className="history-title">
+                  {h.title === "Daily Challenge" && <CalendarCheck size={16} aria-hidden="true" />}
+                  {h.title}
+                </span>
+                <span className="muted">{formatDay(h.day, todayKey)}</span>
+                <span className={`history-acc num ${h.accuracy >= 0.8 ? "strong" : h.accuracy >= 0.6 ? "ok" : "weak"}`}>
+                  {Math.round(h.accuracy * 100)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

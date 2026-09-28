@@ -18,6 +18,8 @@ import {
   recommendSkill,
   refillHearts,
   skillAccuracy,
+  skillMastery,
+  isDailyDone,
 } from "./progress";
 import { accuracy, answer, isFinished, sessionProgress, startSession } from "./session";
 
@@ -165,6 +167,29 @@ describe("skills", () => {
     for (let i = 0; i < 20; i++) p = recordSkill(p, "outs", true);
     for (let i = 0; i < 20; i++) p = recordSkill(p, "showdown", false);
     expect(recommendSkill(p, skills)).toBe("showdown");
+  });
+
+  it("awards mastery tiers for volume and accuracy", () => {
+    let p = initialProgress(T0);
+    expect(skillMastery(p, "nuts")).toBe("Learning");
+    for (let i = 0; i < 10; i++) p = recordSkill(p, "nuts", i < 7);
+    expect(skillMastery(p, "nuts")).toBe("Bronze");
+    for (let i = 0; i < 40; i++) p = recordSkill(p, "nuts", true);
+    expect(skillMastery(p, "nuts")).toBe("Gold");
+  });
+
+  it("rewards the daily challenge once per day and logs practice history", () => {
+    const { progress, reward } = completeSession(
+      initialProgress(T0),
+      { accuracy: 0.9, title: "Daily Challenge", daily: true },
+      T0,
+    );
+    expect(reward.gems).toBe(20);
+    expect(isDailyDone(progress, T0)).toBe(true);
+    expect(isDailyDone(progress, T0 + DAY)).toBe(false);
+    expect(progress.history[0]).toMatchObject({ title: "Daily Challenge", accuracy: 0.9 });
+    const lesson = completeSession(progress, { lessonId: "basics-1", accuracy: 1 }, T0).progress;
+    expect(lesson.history).toHaveLength(1);
   });
 
   it("keeps the best speed round score", () => {
