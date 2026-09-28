@@ -2273,3 +2273,243 @@ p {
     padding: 5px 8px;
   }
 }
+
+/* ---------- Practice: focus, skills, speed round ---------- */
+
+.focus-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--tile-color), color-mix(in srgb, var(--tile-color) 70%, #000));
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  --unit-color: var(--tile-color);
+}
+
+.focus-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 240px;
+}
+
+.focus-text .eyebrow {
+  color: rgb(255 255 255 / 0.78);
+}
+
+.focus-text h2 {
+  font-size: 1.5rem;
+}
+
+.focus-text p {
+  color: rgb(255 255 255 / 0.9);
+  font-size: 0.95rem;
+}
+
+.practice-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.best-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.section-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.section-bar .section-title {
+  margin-top: 0;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.segmented button {
+  min-width: 40px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented button.on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.skill-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.8rem !important;
+  font-weight: 700;
+}
+
+.skill-meter.new {
+  color: var(--muted);
+}
+
+.skill-bar {
+  flex: 1;
+  max-width: 140px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.skill-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.skill-meter.strong {
+  color: var(--brand);
+}
+.skill-meter.strong .skill-bar > span {
+  background: var(--brand);
+}
+.skill-meter.ok {
+  color: var(--gold);
+}
+.skill-meter.ok .skill-bar > span {
+  background: var(--gold);
+}
+.skill-meter.weak {
+  color: var(--red);
+}
+.skill-meter.weak .skill-bar > span {
+  background: var(--red);
+}
+
+.speed-intro {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.speed-intro h1 {
+  font-size: 2.2rem;
+}
+
+.speed-intro p {
+  max-width: 44ch;
+}
+
+.speed-intro .icon-button.close {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+}
+
+.complete-hero.speed {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--blue) 70%, #fff), var(--blue));
+  box-shadow:
+    0 0 0 10px var(--blue-soft),
+    var(--shadow-md);
+}
+
+.pill.best {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.speed-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.speed-actions .btn {
+  flex: 1;
+}
+
+.lesson-progress.timer > div {
+  background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 65%, #fff));
+  transition: width 0.1s linear;
+}
+
+.lesson-progress.timer.low > div {
+  background: var(--red);
+}
+
+.timer-chip {
+  background: var(--blue-soft);
+  color: var(--blue);
+  min-width: 64px;
+  justify-content: center;
+}
+
+.score-chip {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.speed .lesson-body {
+  position: relative;
+  padding-bottom: 48px;
+}
+
+.speed-flash {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  animation: pop-in 0.15s ease-out;
+}
+
+.speed-flash.correct {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.speed-flash.wrong {
+  background: var(--red);
+  color: #fff;
+}

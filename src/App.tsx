@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { exerciseByRef, exerciseRef, findLesson } from "./course/course";
 import { type DrillKind, generateDrill } from "./course/generator";
-import type { Exercise } from "./course/types";
+import type { Exercise, Skill } from "./course/types";
 import { BottomNav, RightRail, Sidebar, type Tab, TopBar } from "./components/Shell";
 import { playCue } from "./sound";
 import {
@@ -12,6 +12,8 @@ import {
   currentStreak,
   loseHeart,
   recordMistake,
+  recordSkill,
+  recordSpeedRound,
   type Reward,
 } from "./state/progress";
 import { useProgress } from "./state/useProgress";
@@ -21,6 +23,7 @@ import { LessonScreen } from "./screens/LessonScreen";
 import { DRILL_TITLES, PracticeScreen } from "./screens/PracticeScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { ShopScreen } from "./screens/ShopScreen";
+import { SpeedRoundScreen } from "./screens/SpeedRoundScreen";
 
 interface ActiveSession {
   id: number;
@@ -47,6 +50,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("learn");
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
+  const [speedRound, setSpeedRound] = useState(false);
 
   function startLesson(lessonId: string) {
     const found = findLesson(lessonId);
@@ -62,7 +66,7 @@ export default function App() {
   }
 
   function startDrill(kind: DrillKind) {
-    setSession({ id: Date.now(), title: DRILL_TITLES[kind], exercises: generateDrill(kind) });
+    setSession({ id: Date.now(), title: DRILL_TITLES[kind], exercises: generateDrill(kind, progress.drillLength) });
   }
 
   function startReview() {
@@ -80,7 +84,21 @@ export default function App() {
     });
   }
 
+  function finishSession(title: string, lessonId: string | undefined, accuracy: number, durationMs: number) {
+    const result = { lessonId, accuracy };
+    const { reward } = completeSession(progress, result);
+    update((p) => completeSession(p, result).progress);
+    if (progress.soundOn) playCue("complete");
+    setCompletion({ title, reward, accuracy, durationMs });
+  }
+
   function handleResult(active: ActiveSession, index: number, correct: boolean) {
+    const exercise = active.exercises[index];
+    // Drill exercises feed the per-skill accuracy shown on the Practice tab.
+    if ((exercise.type === "choice" || exercise.type === "compare") && exercise.skill) {
+      const skill: Skill = exercise.skill;
+      update((p) => recordSkill(p, skill, correct));
+    }
     const ref = active.refs?.[index];
     if (!ref) return;
     // Lessons remember misses; a correct answer in a review clears them.
@@ -95,6 +113,24 @@ export default function App() {
           {...completion}
           streak={currentStreak(progress, now)}
           onContinue={() => setCompletion(null)}
+        />
+      </div>
+    );
+  }
+
+  if (speedRound) {
+    return (
+      <div className="app focus">
+        <SpeedRoundScreen
+          best={progress.speedBest}
+          soundOn={progress.soundOn}
+          onSkillResult={(skill, correct) => update((p) => recordSkill(p, skill, correct))}
+          onRoundEnd={(score) => update((p) => recordSpeedRound(p, score))}
+          onQuit={() => setSpeedRound(false)}
+          onFinish={({ accuracy, durationMs }) => {
+            finishSession("Speed Round", undefined, accuracy, durationMs);
+            setSpeedRound(false);
+          }}
         />
       </div>
     );
@@ -115,11 +151,7 @@ export default function App() {
           onBuyRefill={() => update((p) => buyHeartRefill(p))}
           onQuit={() => setSession(null)}
           onFinish={({ accuracy, durationMs }) => {
-            const result = { lessonId: session.lessonId, accuracy };
-            const { reward } = completeSession(progress, result);
-            update((p) => completeSession(p, result).progress);
-            if (progress.soundOn) playCue("complete");
-            setCompletion({ title: session.title, reward, accuracy, durationMs });
+            finishSession(session.title, session.lessonId, accuracy, durationMs);
             setSession(null);
           }}
         />
@@ -134,7 +166,13 @@ export default function App() {
       <main className="content">
         {tab === "learn" && <LearnScreen progress={progress} now={now} onStartLesson={startLesson} />}
         {tab === "practice" && (
-          <PracticeScreen progress={progress} onStart={startDrill} onStartReview={startReview} />
+          <PracticeScreen
+            progress={progress}
+            onStart={startDrill}
+            onStartReview={startReview}
+            onStartSpeed={() => setSpeedRound(true)}
+            onSetLength={(n) => update((p) => ({ ...p, drillLength: n }))}
+          />
         )}
         {tab === "shop" && (
           <ShopScreen

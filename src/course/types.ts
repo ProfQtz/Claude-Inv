@@ -6,6 +6,9 @@ export interface TableInfo {
   value: string;
 }
 
+/** Practice skills tracked for generated drill exercises. */
+export type Skill = "showdown" | "handName" | "potOdds" | "outs" | "nuts";
+
 /** Pick one answer from a list. Used for trivia, hand reading, and fold/call/raise decisions. */
 export interface ChoiceExercise {
   type: "choice";
@@ -16,6 +19,7 @@ export interface ChoiceExercise {
   options: string[];
   answer: number;
   explanation: string;
+  skill?: Skill;
 }
 
 /** Two players at showdown: pick the winner. The answer is computed by the hand evaluator. */
@@ -25,6 +29,7 @@ export interface CompareExercise {
   board: CardList;
   hands: [CardList, CardList];
   explanation?: string;
+  skill?: Skill;
 }
 
 /** Tap items into the right order. `items` is listed in the correct order. */

@@ -1,4 +1,4 @@
-import { Card, RANK_NAME, RANKS, rankValue } from "./cards";
+import { Card, RANK_NAME, RANKS } from "./cards";
 
 export enum HandCategory {
   HighCard = 0,
@@ -35,74 +35,103 @@ export interface HandValue {
 const valueName = (v: number) => RANK_NAME[RANKS[v - 2]];
 const plural = (v: number) => (v === 6 ? "Sixes" : valueName(v) + "s");
 
+const RANK_VALUE = Object.fromEntries(RANKS.map((r, i) => [r, i + 2])) as Record<Card["rank"], number>;
+const WHEEL_MASK = (1 << 14) | (1 << 5) | (1 << 4) | (1 << 3) | (1 << 2);
+
 /** Evaluate exactly five cards. */
 export function evaluate5(cards: Card[]): HandValue {
   if (cards.length !== 5) throw new Error("evaluate5 needs exactly 5 cards");
 
-  const values = cards.map((c) => rankValue(c.rank)).sort((a, b) => b - a);
-  const isFlush = cards.every((c) => c.suit === cards[0].suit);
-
-  const unique = [...new Set(values)];
-  let straightHigh = 0;
-  if (unique.length === 5) {
-    if (values[0] - values[4] === 4) straightHigh = values[0];
-    // The wheel: A-2-3-4-5 plays as a five-high straight.
-    else if (values.join() === "14,5,4,3,2") straightHigh = 5;
+  const counts = new Array<number>(15).fill(0);
+  let mask = 0;
+  let isFlush = true;
+  for (const c of cards) {
+    const v = RANK_VALUE[c.rank];
+    counts[v]++;
+    mask |= 1 << v;
+    if (c.suit !== cards[0].suit) isFlush = false;
   }
 
-  // Group by rank: larger groups first, then higher rank.
-  const counts = new Map<number, number>();
-  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
-  const groups = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
-  const byGroup = groups.map(([v]) => v);
-  const shape = groups.map(([, n]) => n).join("");
+  // Group ranks by multiplicity, highest rank first within each group.
+  const quads: number[] = [];
+  const trips: number[] = [];
+  const pairs: number[] = [];
+  const singles: number[] = [];
+  for (let v = 14; v >= 2; v--) {
+    const n = counts[v];
+    if (n === 4) quads.push(v);
+    else if (n === 3) trips.push(v);
+    else if (n === 2) pairs.push(v);
+    else if (n === 1) singles.push(v);
+  }
 
+  let straightHigh = 0;
+  if (singles.length === 5) {
+    if (singles[0] - singles[4] === 4) straightHigh = singles[0];
+    // The wheel: A-2-3-4-5 plays as a five-high straight.
+    else if (mask === WHEEL_MASK) straightHigh = 5;
+  }
+
+  const byGroup = [...quads, ...trips, ...pairs, ...singles];
   let category: HandCategory;
   let kickers: number[];
   if (straightHigh && isFlush) {
     category = HandCategory.StraightFlush;
     kickers = [straightHigh];
-  } else if (shape === "41") {
+  } else if (quads.length) {
     category = HandCategory.FourOfAKind;
     kickers = byGroup;
-  } else if (shape === "32") {
+  } else if (trips.length && pairs.length) {
     category = HandCategory.FullHouse;
     kickers = byGroup;
   } else if (isFlush) {
     category = HandCategory.Flush;
-    kickers = values;
+    kickers = singles;
   } else if (straightHigh) {
     category = HandCategory.Straight;
     kickers = [straightHigh];
-  } else if (shape === "311") {
+  } else if (trips.length) {
     category = HandCategory.ThreeOfAKind;
     kickers = byGroup;
-  } else if (shape === "221") {
+  } else if (pairs.length === 2) {
     category = HandCategory.TwoPair;
     kickers = byGroup;
-  } else if (shape === "2111") {
+  } else if (pairs.length === 1) {
     category = HandCategory.OnePair;
     kickers = byGroup;
   } else {
     category = HandCategory.HighCard;
-    kickers = values;
+    kickers = singles;
   }
   return { category, kickers, cards };
 }
 
-function combinations<T>(items: T[], k: number): T[][] {
-  if (k === 0) return [[]];
-  if (items.length < k) return [];
-  const [first, ...rest] = items;
-  return [...combinations(rest, k - 1).map((c) => [first, ...c]), ...combinations(rest, k)];
+/** Index subsets of size k from 0..n-1, cached because evaluation runs them constantly. */
+const comboCache = new Map<string, number[][]>();
+function indexCombinations(n: number, k: number): number[][] {
+  const key = `${n}/${k}`;
+  let combos = comboCache.get(key);
+  if (!combos) {
+    combos = [];
+    const pick = (start: number, chosen: number[]) => {
+      if (chosen.length === k) {
+        combos!.push(chosen);
+        return;
+      }
+      for (let i = start; i < n; i++) pick(i + 1, [...chosen, i]);
+    };
+    pick(0, []);
+    comboCache.set(key, combos);
+  }
+  return combos;
 }
 
 /** Evaluate the best five-card hand from 5–7 cards. */
 export function evaluate(cards: Card[]): HandValue {
   if (cards.length < 5 || cards.length > 7) throw new Error("evaluate needs 5 to 7 cards");
   let best: HandValue | null = null;
-  for (const combo of combinations(cards, 5)) {
-    const value = evaluate5(combo);
+  for (const combo of indexCombinations(cards.length, 5)) {
+    const value = evaluate5(combo.map((i) => cards[i]));
     if (!best || compareHands(value, best) > 0) best = value;
   }
   return best!;

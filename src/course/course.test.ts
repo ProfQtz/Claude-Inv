@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseCards } from "../poker/cards";
 import { COURSE, exerciseByRef, exerciseRef, LESSON_ORDER } from "./course";
-import { generateDrill, resolveCompare } from "./generator";
+import { countOuts, findNuts, generateDrill, generateExercise, resolveCompare, SKILLS } from "./generator";
+import { describeHand, HandCategory } from "../poker/evaluator";
 import type { Exercise } from "./types";
 
 const allExercises = COURSE.flatMap((u) => u.lessons.flatMap((l) => l.exercises.map((e) => ({ id: l.id, e }))));
@@ -92,7 +93,7 @@ describe("drill generator", () => {
   let seed = 42;
   const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
 
-  it.each(["showdown", "handName", "potOdds", "mixed"] as const)("generates valid %s drills", (kind) => {
+  it.each(["showdown", "handName", "potOdds", "outs", "nuts", "mixed"] as const)("generates valid %s drills", (kind) => {
     for (let i = 0; i < 25; i++) generateDrill(kind, 6, random).forEach(checkExercise);
   });
 });
@@ -102,5 +103,40 @@ describe("exercise refs", () => {
     const lesson = COURSE[1].lessons[2];
     expect(exerciseByRef(exerciseRef(lesson.id, 3))).toBe(lesson.exercises[3]);
     expect(exerciseByRef("missing#0")).toBeUndefined();
+  });
+});
+
+describe("outs and nuts", () => {
+  it("counts straight and flush outs", () => {
+    expect(countOuts(parseCards("9c 8d"), parseCards("7s 6h 2c"))).toHaveLength(8);
+    expect(countOuts(parseCards("Ah 7h"), parseCards("Kh 9h 2c"))).toHaveLength(9);
+    // Open-ended straight draw plus flush draw: 9 flush cards + 6 non-heart straight cards.
+    expect(countOuts(parseCards("Qh Jh"), parseCards("Th 9h 3c"))).toHaveLength(15);
+  });
+
+  it("finds the nuts", () => {
+    expect(describeHand(findNuts(parseCards("Kc 9d 4s 2h 7c")).value)).toBe("Three of a Kind, Kings");
+    expect(findNuts(parseCards("Th 9h 8h 2c 2d")).value.category).toBe(HandCategory.StraightFlush);
+    expect(describeHand(findNuts(parseCards("As Ks Qs Js 2h")).value)).toBe("Royal Flush");
+  });
+});
+
+describe("skill tags", () => {
+  it("tags every generated drill exercise with its skill", () => {
+    for (const skill of SKILLS) {
+      for (const e of generateDrill(skill, 3)) {
+        expect(e.type === "choice" || e.type === "compare").toBe(true);
+        if (e.type === "choice" || e.type === "compare") expect(e.skill).toBe(skill);
+      }
+    }
+  });
+
+  it("gives outs drills an answer that matches the counted outs", () => {
+    for (let i = 0; i < 20; i++) {
+      const e = generateExercise("outs");
+      if (e.type !== "choice") throw new Error("expected choice");
+      const outs = countOuts(parseCards(e.hand!), parseCards(e.board!));
+      expect(Number(e.options[e.answer])).toBe(outs.length);
+    }
   });
 });

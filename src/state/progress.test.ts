@@ -13,7 +13,11 @@ import {
   MAX_HEARTS,
   nextLessonId,
   recordMistake,
+  recordSkill,
+  recordSpeedRound,
+  recommendSkill,
   refillHearts,
+  skillAccuracy,
 } from "./progress";
 import { accuracy, answer, isFinished, sessionProgress, startSession } from "./session";
 
@@ -139,5 +143,32 @@ describe("mistakes review", () => {
     p = recordMistake(p, "basics-2#3");
     expect(p.reviewQueue).toEqual(["basics-1#0", "basics-2#3"]);
     expect(clearMistake(p, "basics-1#0").reviewQueue).toEqual(["basics-2#3"]);
+  });
+});
+
+describe("skills", () => {
+  it("measures accuracy after enough attempts", () => {
+    let p = initialProgress(T0);
+    for (let i = 0; i < 4; i++) p = recordSkill(p, "outs", i < 3);
+    expect(skillAccuracy(p, "outs")).toBeNull();
+    p = recordSkill(p, "outs", false);
+    expect(skillAccuracy(p, "outs")).toBeCloseTo(0.6);
+  });
+
+  it("recommends unmeasured skills first, then the weakest", () => {
+    let p = initialProgress(T0);
+    const skills = ["showdown", "outs"] as const;
+    for (let i = 0; i < 5; i++) p = recordSkill(p, "showdown", true);
+    expect(recommendSkill(p, skills)).toBe("outs");
+    for (let i = 0; i < 5; i++) p = recordSkill(p, "outs", i === 0);
+    expect(recommendSkill(p, skills)).toBe("outs");
+    for (let i = 0; i < 20; i++) p = recordSkill(p, "outs", true);
+    for (let i = 0; i < 20; i++) p = recordSkill(p, "showdown", false);
+    expect(recommendSkill(p, skills)).toBe("showdown");
+  });
+
+  it("keeps the best speed round score", () => {
+    const p = recordSpeedRound(recordSpeedRound(initialProgress(T0), 12), 7);
+    expect(p.speedBest).toBe(12);
   });
 });

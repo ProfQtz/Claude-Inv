@@ -1,4 +1,5 @@
 import { COURSE, LESSON_ORDER } from "../course/course";
+import type { Skill } from "../course/types";
 
 export const MAX_HEARTS = 5;
 export const HEART_REFILL_MS = 20 * 60 * 1000;
@@ -8,6 +9,15 @@ export const STREAK_FREEZE_GEM_COST = 200;
 export const MAX_STREAK_FREEZES = 2;
 /** Most missed exercises kept for review; the oldest drop off first. */
 export const MAX_REVIEW_ITEMS = 40;
+
+/** Skill accuracy needs this many answers before it counts as measured. */
+export const SKILL_MIN_ATTEMPTS = 5;
+export const DRILL_LENGTHS = [5, 10, 20] as const;
+
+export interface SkillRecord {
+  attempts: number;
+  correct: number;
+}
 
 export interface LessonRecord {
   completions: number;
@@ -33,6 +43,9 @@ export interface Progress {
   /** Missed course exercises ("lessonId#index") waiting to be reviewed. */
   reviewQueue: string[];
   soundOn: boolean;
+  skills: Partial<Record<Skill, SkillRecord>>;
+  speedBest: number;
+  drillLength: number;
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -52,6 +65,9 @@ export function initialProgress(now = Date.now()): Progress {
     streakFreezes: 0,
     reviewQueue: [],
     soundOn: true,
+    skills: {},
+    speedBest: 0,
+    drillLength: 10,
   };
 }
 
@@ -235,6 +251,33 @@ export function clearMistake(p: Progress, ref: string): Progress {
   return { ...p, reviewQueue: p.reviewQueue.filter((r) => r !== ref) };
 }
 
+export function recordSkill(p: Progress, skill: Skill, correct: boolean): Progress {
+  const prev = p.skills[skill] ?? { attempts: 0, correct: 0 };
+  return {
+    ...p,
+    skills: { ...p.skills, [skill]: { attempts: prev.attempts + 1, correct: prev.correct + (correct ? 1 : 0) } },
+  };
+}
+
+/** Accuracy for a skill, or null until it has enough attempts to mean something. */
+export function skillAccuracy(p: Progress, skill: Skill): number | null {
+  const r = p.skills[skill];
+  return r && r.attempts >= SKILL_MIN_ATTEMPTS ? r.correct / r.attempts : null;
+}
+
+/** The skill to practice next: an unmeasured one first, otherwise the weakest. */
+export function recommendSkill(p: Progress, skills: readonly Skill[]): Skill {
+  const unmeasured = skills.filter((s) => skillAccuracy(p, s) === null);
+  if (unmeasured.length > 0) {
+    return unmeasured.reduce((a, b) => ((p.skills[b]?.attempts ?? 0) < (p.skills[a]?.attempts ?? 0) ? b : a));
+  }
+  return skills.reduce((a, b) => (skillAccuracy(p, b)! < skillAccuracy(p, a)! ? b : a));
+}
+
+export function recordSpeedRound(p: Progress, score: number): Progress {
+  return score > p.speedBest ? { ...p, speedBest: score } : p;
+}
+
 export interface Achievement {
   id: string;
   title: string;
@@ -253,6 +296,7 @@ export function achievements(p: Progress): Achievement[] {
     { id: "streak3", title: "On a Heater", description: "Reach a 3-day streak", icon: "flame", unlocked: p.longestStreak >= 3 },
     { id: "streak7", title: "Grinder", description: "Reach a 7-day streak", icon: "calendar", unlocked: p.longestStreak >= 7 },
     { id: "drills", title: "Table Time", description: "Complete 5 practice drills", icon: "target", unlocked: p.drillsCompleted >= 5 },
+    { id: "speed", title: "Quick Reads", description: "Score 10 in a Speed Round", icon: "zap", unlocked: p.speedBest >= 10 },
     { id: "xp500", title: "High Roller", description: "Earn 500 XP", icon: "trending", unlocked: p.xp >= 500 },
     {
       id: "course",
