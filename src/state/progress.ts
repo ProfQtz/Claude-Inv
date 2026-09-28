@@ -247,18 +247,18 @@ export function achievements(p: Progress): Achievement[] {
   const completed = LESSON_ORDER.filter((id) => isLessonComplete(p, id)).length;
   const unitsDone = COURSE.filter((u) => u.lessons.every((l) => isLessonComplete(p, l.id))).length;
   return [
-    { id: "first", title: "First Hand", description: "Complete your first lesson", icon: "🎉", unlocked: completed >= 1 },
-    { id: "perfect", title: "Flawless", description: "Finish a lesson with no mistakes", icon: "💎", unlocked: p.perfectLessons >= 1 },
-    { id: "unit", title: "Graduate", description: "Complete a whole unit", icon: "🎓", unlocked: unitsDone >= 1 },
-    { id: "streak3", title: "On a Heater", description: "Reach a 3-day streak", icon: "🔥", unlocked: p.longestStreak >= 3 },
-    { id: "streak7", title: "Grinder", description: "Reach a 7-day streak", icon: "📅", unlocked: p.longestStreak >= 7 },
-    { id: "drills", title: "Table Time", description: "Complete 5 practice drills", icon: "🎯", unlocked: p.drillsCompleted >= 5 },
-    { id: "xp500", title: "High Roller", description: "Earn 500 XP", icon: "💰", unlocked: p.xp >= 500 },
+    { id: "first", title: "First Hand", description: "Complete your first lesson", icon: "party", unlocked: completed >= 1 },
+    { id: "perfect", title: "Flawless", description: "Finish a lesson with no mistakes", icon: "sparkles", unlocked: p.perfectLessons >= 1 },
+    { id: "unit", title: "Graduate", description: "Complete a whole unit", icon: "graduation", unlocked: unitsDone >= 1 },
+    { id: "streak3", title: "On a Heater", description: "Reach a 3-day streak", icon: "flame", unlocked: p.longestStreak >= 3 },
+    { id: "streak7", title: "Grinder", description: "Reach a 7-day streak", icon: "calendar", unlocked: p.longestStreak >= 7 },
+    { id: "drills", title: "Table Time", description: "Complete 5 practice drills", icon: "target", unlocked: p.drillsCompleted >= 5 },
+    { id: "xp500", title: "High Roller", description: "Earn 500 XP", icon: "trending", unlocked: p.xp >= 500 },
     {
       id: "course",
       title: "Shark",
       description: "Finish the entire course",
-      icon: "🦈",
+      icon: "fish",
       unlocked: completed === LESSON_ORDER.length,
     },
   ];

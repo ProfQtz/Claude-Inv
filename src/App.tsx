@@ -2,7 +2,7 @@ import { useState } from "react";
 import { exerciseByRef, exerciseRef, findLesson } from "./course/course";
 import { type DrillKind, generateDrill } from "./course/generator";
 import type { Exercise } from "./course/types";
-import { TopBar } from "./components/TopBar";
+import { BottomNav, RightRail, Sidebar, type Tab, TopBar } from "./components/Shell";
 import { playCue } from "./sound";
 import {
   buyHeartRefill,
@@ -22,8 +22,6 @@ import { DRILL_TITLES, PracticeScreen } from "./screens/PracticeScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 
-type Tab = "learn" | "practice" | "shop" | "profile";
-
 interface ActiveSession {
   id: number;
   title: string;
@@ -41,13 +39,6 @@ interface Completion {
   accuracy: number;
   durationMs: number;
 }
-
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "learn", label: "Learn", icon: "🏠" },
-  { id: "practice", label: "Practice", icon: "🎯" },
-  { id: "shop", label: "Shop", icon: "🛍️" },
-  { id: "profile", label: "Profile", icon: "👤" },
-];
 
 const REVIEW_SIZE = 8;
 
@@ -137,7 +128,8 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app shell">
+      <Sidebar tab={tab} onTab={setTab} />
       <TopBar progress={progress} now={now} />
       <main className="content">
         {tab === "learn" && <LearnScreen progress={progress} now={now} onStartLesson={startLesson} />}
@@ -161,14 +153,8 @@ export default function App() {
           />
         )}
       </main>
-      <nav className="bottom-nav">
-        {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>
-            <span className="nav-icon">{t.icon}</span>
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </nav>
+      <RightRail progress={progress} now={now} onContinue={startLesson} />
+      <BottomNav tab={tab} onTab={setTab} />
     </div>
   );
 }

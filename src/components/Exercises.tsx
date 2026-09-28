@@ -399,10 +399,10 @@ export function ScenarioView({
           className={`step-feedback ${choice === step.answer ? "correct" : "wrong"}`}
           role="status"
         >
-          <strong>{choice === step.answer ? "✔ Good decision" : "✘ Better: " + step.options[step.answer]}</strong>
+          <strong>{choice === step.answer ? "Good decision" : `Better: ${step.options[step.answer]}`}</strong>
           <p>{step.explanation}</p>
           {!finished && (
-            <button className="btn btn-blue" onClick={advance} autoFocus>
+            <button className="btn btn-primary" onClick={advance} autoFocus>
               {last ? "Finish hand" : `Deal the ${exercise.steps[stepIndex + 1].street.toLowerCase()}`}
             </button>
           )}

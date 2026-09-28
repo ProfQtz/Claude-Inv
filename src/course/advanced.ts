@@ -6,8 +6,8 @@ export const POSTFLOP_UNIT: Unit = {
   id: "postflop",
   title: "Post-flop Play",
   description: "Read board texture, c-bet with purpose and play full hands.",
-  color: "#00a896",
-  icon: "🎯",
+  color: "#0f8b8d",
+  icon: "crosshair",
   guidebook: [
     {
       heading: "Board texture",
@@ -296,8 +296,8 @@ export const TOURNAMENT_UNIT: Unit = {
   id: "tournaments",
   title: "Tournament Basics",
   description: "Rising blinds, short stacks and the bubble.",
-  color: "#e35d6a",
-  icon: "🏅",
+  color: "#c8435e",
+  icon: "medal",
   guidebook: [
     {
       heading: "How tournaments work",

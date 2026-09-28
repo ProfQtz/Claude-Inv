@@ -21,8 +21,8 @@ export const COURSE: Unit[] = [
     id: "basics",
     title: "Card Basics",
     description: "Meet the deck: suits, ranks and how cards compare.",
-    color: "#58cc02",
-    icon: "🂡",
+    color: "#0e7c58",
+    icon: "spade",
     guidebook: [
       {
         heading: "The deck",
@@ -177,8 +177,8 @@ export const COURSE: Unit[] = [
     id: "rankings",
     title: "Hand Rankings",
     description: "Learn which hands beat which — the foundation of every decision.",
-    color: "#1cb0f6",
-    icon: "🏆",
+    color: "#2f6fde",
+    icon: "trophy",
     guidebook: [
       {
         heading: "Best five cards",
@@ -423,8 +423,8 @@ export const COURSE: Unit[] = [
     id: "holdem",
     title: "How Hold'em Works",
     description: "Blinds, streets, actions and showdown — the flow of a hand.",
-    color: "#ce82ff",
-    icon: "🃏",
+    color: "#7156d9",
+    icon: "layers",
     guidebook: [
       {
         heading: "Hole cards and community cards",
@@ -635,8 +635,8 @@ export const COURSE: Unit[] = [
     id: "showdown",
     title: "Showdown",
     description: "Who wins the pot? Read the board and compare hands.",
-    color: "#ff9600",
-    icon: "⚔️",
+    color: "#d27a14",
+    icon: "swords",
     guidebook: [
       {
         heading: "Compare the best five",
@@ -751,8 +751,8 @@ export const COURSE: Unit[] = [
     id: "starting",
     title: "Starting Hands",
     description: "Which two cards are worth playing, and from where.",
-    color: "#ff4b4b",
-    icon: "✋",
+    color: "#d64541",
+    icon: "hand",
     guidebook: [
       {
         heading: "Play fewer hands",
@@ -941,8 +941,8 @@ export const COURSE: Unit[] = [
     id: "odds",
     title: "Outs & Pot Odds",
     description: "Count outs, estimate equity and make +EV calls.",
-    color: "#2b70c9",
-    icon: "🧮",
+    color: "#4957c9",
+    icon: "calculator",
     guidebook: [
       {
         heading: "Outs",
@@ -1190,8 +1190,8 @@ export const COURSE: Unit[] = [
     id: "strategy",
     title: "Strategy & Mindset",
     description: "Value bets, bluffs, bankroll and keeping a cool head.",
-    color: "#a560e8",
-    icon: "🧠",
+    color: "#a14b8c",
+    icon: "brain",
     guidebook: [
       {
         heading: "Why you bet",

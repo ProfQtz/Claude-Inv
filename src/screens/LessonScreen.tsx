@@ -1,3 +1,4 @@
+import { CircleCheck, CircleX, Gem, Heart, HeartCrack, Infinity as InfinityIcon, LogOut, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Exercise } from "../course/types";
 import {
@@ -33,7 +34,7 @@ interface Props {
   onFinish: (result: { accuracy: number; durationMs: number; mistakes: number }) => void;
 }
 
-const PRAISE = ["Nice!", "Great job!", "Correct!", "Nailed it!", "Ship it!", "Excellent!"];
+const PRAISE = ["Correct", "Nice work", "Well read", "Exactly right", "Spot on"];
 
 export function LessonScreen({
   title,
@@ -126,18 +127,27 @@ export function LessonScreen({
     <div className="lesson">
       <header className="lesson-header">
         <button className="icon-button" aria-label="Quit lesson" onClick={() => setConfirmQuit(true)}>
-          ✕
+          <X size={24} aria-hidden="true" />
         </button>
-        <div className="progress-track" aria-label={`${Math.round(progress * 100)}% complete`}>
-          <div className="progress-fill" style={{ width: `${progress * 100}%` }} />
+        <div
+          className="lesson-progress"
+          role="progressbar"
+          aria-valuenow={Math.round(progress * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Lesson progress"
+        >
+          <div style={{ width: `${progress * 100}%` }} />
         </div>
         {hearts !== null ? (
-          <span className="stat hearts" title="Hearts">
-            ❤️ {hearts}
+          <span className="chip-stat hearts" title="Hearts">
+            <Heart size={18} fill="currentColor" aria-hidden="true" />
+            <span className="num">{hearts}</span>
           </span>
         ) : (
-          <span className="stat" title="Practice mode: unlimited hearts">
-            ❤️ ∞
+          <span className="chip-stat hearts" title="Practice mode: unlimited hearts">
+            <Heart size={18} fill="currentColor" aria-hidden="true" />
+            <InfinityIcon size={18} aria-label="unlimited" />
           </span>
         )}
       </header>
@@ -145,7 +155,11 @@ export function LessonScreen({
       <main className="lesson-body" key={attempt}>
         <p className="lesson-title">
           {title}
-          {retry && <span className="retry-badge">↻ Previous mistake</span>}
+          {retry && (
+            <span className="retry-badge">
+              <RotateCcw size={12} aria-hidden="true" /> Previous mistake
+            </span>
+          )}
         </p>
         {exercise.type === "choice" && (
           <ChoiceView exercise={exercise} answer={answer} onAnswer={setAnswer} locked={!!checked} order={order} />
@@ -170,17 +184,24 @@ export function LessonScreen({
         <div className="footer-inner">
           {checked ? (
             <div className="feedback" role="status">
+              <span className="feedback-icon" aria-hidden="true">
+                {checked.correct ? <CircleCheck size={28} /> : <CircleX size={28} />}
+              </span>
+              <div className="feedback-text">
               <strong>
                 {checked.correct
-                  ? `✔ ${exercise.type === "scenario" ? "Well played!" : praise}`
+                  ? exercise.type === "scenario"
+                    ? "Well played"
+                    : praise
                   : exercise.type === "scenario"
-                    ? "✘ Some decisions to review. This hand will come back."
-                    : "✘ Not quite"}
+                    ? "Some decisions to review. This hand will come back."
+                    : "Not quite"}
               </strong>
               {!checked.correct && correctAnswerText(exercise) && (
                 <p className="correct-answer">Correct answer: {correctAnswerText(exercise)}</p>
               )}
               <p>{feedbackText(exercise)}</p>
+              </div>
             </div>
           ) : (
             <span className="footer-hint">
@@ -192,13 +213,13 @@ export function LessonScreen({
             </span>
           )}
           {checked ? (
-            <button className={`btn ${checked.correct ? "btn-green" : "btn-red"}`} onClick={next} autoFocus>
+            <button className={`btn ${checked.correct ? "btn-primary" : "btn-danger"}`} onClick={next} autoFocus>
               Continue
             </button>
           ) : (
             exercise.type !== "match" &&
             exercise.type !== "scenario" && (
-              <button className="btn btn-green" disabled={!isReady(exercise, answer)} onClick={() => check()}>
+              <button className="btn btn-primary" disabled={!isReady(exercise, answer)} onClick={() => check()}>
                 Check
               </button>
             )
@@ -209,14 +230,16 @@ export function LessonScreen({
       {confirmQuit && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="modal-icon">🃏</div>
-            <h3>Wait, don't fold yet!</h3>
-            <p>You'll lose your progress in this lesson if you quit now.</p>
-            <button className="btn btn-blue" onClick={() => setConfirmQuit(false)} autoFocus>
+            <span className="icon-disc brand">
+              <LogOut size={28} aria-hidden="true" />
+            </span>
+            <h3>Leave this lesson?</h3>
+            <p>Your progress in this lesson won't be saved.</p>
+            <button className="btn btn-primary" onClick={() => setConfirmQuit(false)} autoFocus>
               Keep learning
             </button>
             <button className="btn btn-ghost danger" onClick={onQuit}>
-              End session
+              Leave lesson
             </button>
           </div>
         </div>
@@ -225,11 +248,13 @@ export function LessonScreen({
       {outOfHearts && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="modal-icon">💔</div>
+            <span className="icon-disc red">
+              <HeartCrack size={28} aria-hidden="true" />
+            </span>
             <h3>You ran out of hearts</h3>
-            <p>Refill with gems, or head to Practice — each drill restores a heart.</p>
-            <button className="btn btn-blue" disabled={gems < HEART_REFILL_GEM_COST} onClick={onBuyRefill}>
-              Refill hearts · 💎 {HEART_REFILL_GEM_COST}
+            <p>Refill them with gems, or go to Practice. Every drill you finish restores a heart.</p>
+            <button className="btn btn-primary" disabled={gems < HEART_REFILL_GEM_COST} onClick={onBuyRefill}>
+              Refill hearts for <Gem size={16} aria-hidden="true" /> {HEART_REFILL_GEM_COST}
             </button>
             <button className="btn btn-ghost" onClick={onQuit}>
               Quit lesson
