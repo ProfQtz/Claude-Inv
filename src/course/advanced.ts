@@ -1,0 +1,436 @@
+import type { Unit } from "./types";
+
+const STACKS = { label: "Stacks", value: "100 BB" };
+
+export const POSTFLOP_UNIT: Unit = {
+  id: "postflop",
+  title: "Post-flop Play",
+  description: "Read board texture, c-bet with purpose and play full hands.",
+  color: "#00a896",
+  icon: "🎯",
+  guidebook: [
+    {
+      heading: "Board texture",
+      body: "A dry board (like K♠ 7♦ 2♣) has few draws. A wet board (like J♥ T♥ 9♣) is full of straight and flush draws. Texture decides how often you bet and how big.",
+    },
+    {
+      heading: "Continuation bets",
+      body: "As the preflop raiser you're expected to have strong hands, so a small c-bet on dry boards often takes the pot. On wet boards, bet bigger with strong hands and draws, and check more often with air.",
+    },
+    {
+      heading: "Pot control",
+      body: "With a medium-strength hand, like a weak top pair, keep the pot small. Build big pots with big hands.",
+    },
+    {
+      heading: "Play a hand",
+      body: "Scenario exercises walk you through a hand street by street. Each decision counts, so think about your hand, the board and what your opponent's actions mean.",
+    },
+  ],
+  lessons: [
+    {
+      id: "postflop-1",
+      title: "Board Texture",
+      exercises: [
+        {
+          type: "choice",
+          prompt: "How would you describe this flop?",
+          board: "Jh Th 9c",
+          options: ["Wet: lots of draws", "Dry: few draws", "Paired", "Monotone"],
+          answer: 0,
+          explanation: "Three connected cards and two hearts: straight and flush draws everywhere. That's a wet board.",
+        },
+        {
+          type: "choice",
+          prompt: "How would you describe this flop?",
+          board: "Kd 7c 2h",
+          options: ["Dry and rainbow", "Wet and connected", "Monotone", "Paired"],
+          answer: 0,
+          explanation: "Unconnected ranks in three different suits (\"rainbow\"). Very few draws are possible.",
+        },
+        {
+          type: "choice",
+          prompt: "What's special about this flop?",
+          board: "Ks 8s 3s",
+          options: ["It's monotone: one suit", "It's rainbow", "It's paired", "Nothing"],
+          answer: 0,
+          explanation: "All three cards are spades. Anyone with two spades already has a flush.",
+        },
+        {
+          type: "match",
+          prompt: "Match the board term",
+          pairs: [
+            ["Dry", "Few draws possible"],
+            ["Wet", "Many draws possible"],
+            ["Rainbow", "Three different suits"],
+            ["Monotone", "All one suit"],
+          ],
+        },
+        {
+          type: "choice",
+          prompt: "You raised preflop. On which flop does a small bluff c-bet work best?",
+          options: ["A♠ 7♦ 2♣", "9♥ 8♥ 7♣", "T♠ 9♠ 8♦", "7♦ 6♦ 5♣"],
+          answer: 0,
+          explanation: "Dry ace-high boards miss most calling hands, and the preflop raiser holds far more aces. The connected boards hit the caller's range hard.",
+        },
+      ],
+    },
+    {
+      id: "postflop-2",
+      title: "Betting Post-flop",
+      exercises: [
+        {
+          type: "choice",
+          prompt: "The big blind checks to you. What's your play?",
+          hand: "Ah Kd",
+          board: "Ac 8s 3d",
+          info: [
+            { label: "Position", value: "Button" },
+            { label: "Pot", value: "6.5 BB" },
+          ],
+          options: ["Check behind", "Bet about ⅓ pot", "Go all-in"],
+          answer: 1,
+          explanation: "Top pair, top kicker on a dry board: bet small for value. Worse aces and 8x can call. Shoving only gets called by better.",
+        },
+        {
+          type: "choice",
+          prompt: "What is a check-raise?",
+          options: [
+            "Checking, then raising after an opponent bets",
+            "Raising, then checking the next street",
+            "Checking every street",
+            "Raising preflop after a check",
+          ],
+          answer: 0,
+          explanation: "You check, your opponent bets, and you raise. It's a strong move, used both for value and as a bluff.",
+        },
+        {
+          type: "choice",
+          prompt: "What does \"pot control\" mean?",
+          options: [
+            "Keeping the pot small with a medium-strength hand",
+            "Always betting the size of the pot",
+            "Letting the dealer manage the chips",
+            "Raising every street",
+          ],
+          answer: 0,
+          explanation: "Medium hands win small pots and lose big ones. Checking some streets keeps the pot manageable.",
+        },
+        {
+          type: "choice",
+          prompt: "Why bet bigger on wet boards when you have a strong hand?",
+          options: [
+            "To charge draws a higher price",
+            "Because the rules require it",
+            "To make everyone fold",
+            "It doesn't matter",
+          ],
+          answer: 0,
+          explanation: "Draws need a good price to call. Bigger bets make their calls unprofitable and protect your hand.",
+        },
+        {
+          type: "choice",
+          prompt: "Your opponent bets. What should you do?",
+          hand: "Qc Js",
+          board: "Ah 8d 3c",
+          info: [
+            { label: "Pot (incl. bet)", value: "12 BB" },
+            { label: "To call", value: "4 BB" },
+          ],
+          options: ["Fold", "Call", "Raise"],
+          answer: 0,
+          explanation: "No pair, no draw, and only backdoor chances. Folding a hand that missed completely is fine.",
+        },
+      ],
+    },
+    {
+      id: "postflop-3",
+      title: "Play a Hand",
+      exercises: [
+        {
+          type: "scenario",
+          prompt: "Pocket Aces from the cutoff",
+          hand: "Ah Ad",
+          setup: [{ label: "Position", value: "Cutoff" }, STACKS],
+          steps: [
+            {
+              street: "Preflop",
+              prompt: "Everyone folds to you. Your action?",
+              options: ["Fold", "Call", "Raise to 2.5 BB"],
+              answer: 2,
+              explanation: "Aces are the best hand in poker. Always raise.",
+            },
+            {
+              street: "Flop",
+              board: "Kc 7d 2s",
+              info: [{ label: "Pot", value: "5.5 BB" }],
+              prompt: "The big blind calls and checks. Your action?",
+              options: ["Check", "Bet 2 BB", "Go all-in"],
+              answer: 1,
+              explanation: "On a dry board a small c-bet gets called by Kx and 7x, hands you beat. All-in only gets called by sets.",
+            },
+            {
+              street: "Turn",
+              board: "Kc 7d 2s 4h",
+              info: [{ label: "Pot", value: "9.5 BB" }],
+              prompt: "They call and check again. Your action?",
+              options: ["Check", "Bet 6 BB", "Fold"],
+              answer: 1,
+              explanation: "The 4 is a blank. Keep betting for value: kings and sevens will keep calling.",
+            },
+            {
+              street: "River",
+              board: "Kc 7d 2s 4h Ks",
+              info: [
+                { label: "Pot (incl. bet)", value: "37.5 BB" },
+                { label: "To call", value: "16 BB" },
+              ],
+              prompt: "The second King arrives and they suddenly bet 16 BB. Your action?",
+              options: ["Fold", "Call", "Raise all-in"],
+              answer: 1,
+              explanation: "A king now beats you, but they can also be bluffing or value-betting a 7. You only need 30% equity to call. Raising only gets called by better.",
+            },
+          ],
+          summary: "Value-bet big pairs on dry boards, and call rather than raise when the board turns scary.",
+        },
+        {
+          type: "scenario",
+          prompt: "A suited connector on the button",
+          hand: "9h 8h",
+          setup: [{ label: "Position", value: "Button" }, STACKS],
+          steps: [
+            {
+              street: "Preflop",
+              prompt: "Folded to you on the button. Your action?",
+              options: ["Fold", "Call", "Raise to 2.5 BB"],
+              answer: 2,
+              explanation: "With only the blinds left to act, 98s is an easy open-raise from the button.",
+            },
+            {
+              street: "Flop",
+              board: "Ah 6h 2c",
+              info: [{ label: "Pot", value: "5.5 BB" }],
+              prompt: "The big blind calls and checks. Your action?",
+              options: ["Check", "Bet 2 BB (semi-bluff)", "Fold"],
+              answer: 1,
+              explanation: "You have a flush draw. A semi-bluff wins now if they fold, and you still have 9 outs if called.",
+            },
+            {
+              street: "Turn",
+              board: "Ah 6h 2c Kd",
+              info: [
+                { label: "Pot (incl. bet)", value: "20.5 BB" },
+                { label: "To call", value: "11 BB" },
+              ],
+              prompt: "They called the flop and now lead out for 11 BB. Your action?",
+              options: ["Fold", "Call", "Raise"],
+              answer: 0,
+              explanation: "You need 11 ÷ 31.5 ≈ 35% equity, but a flush draw with one card to come is about 20%. Fold.",
+            },
+          ],
+          summary: "Semi-bluff your draws, but don't pay too much to chase them.",
+        },
+        {
+          type: "scenario",
+          prompt: "Set mining with pocket fives",
+          hand: "5s 5d",
+          setup: [{ label: "Position", value: "Hijack" }, STACKS],
+          steps: [
+            {
+              street: "Preflop",
+              prompt: "UTG raises to 3 BB. Your action?",
+              options: ["Fold", "Call", "Re-raise to 10 BB"],
+              answer: 1,
+              explanation: "Small pairs play well with deep stacks: call cheaply and try to flop a set (about 12%).",
+            },
+            {
+              street: "Flop",
+              board: "Qc 5h 9d",
+              info: [
+                { label: "Pot", value: "7.5 BB" },
+                { label: "UTG bets", value: "5 BB" },
+              ],
+              prompt: "You flop a set! UTG bets 5 BB. Your action?",
+              options: ["Fold", "Call", "Raise to 16 BB"],
+              answer: 2,
+              explanation: "Raise to build the pot and charge the straight draws on Q-9. Top-pair hands like AQ will often pay you.",
+            },
+            {
+              street: "Turn",
+              board: "Qc 5h 9d 2s",
+              info: [{ label: "Pot", value: "39.5 BB" }],
+              prompt: "UTG calls, then checks the turn. Your action?",
+              options: ["Check", "Bet 26 BB", "Fold"],
+              answer: 1,
+              explanation: "The 2 changes nothing. Keep building the pot while their draws and one-pair hands can still call.",
+            },
+            {
+              street: "River",
+              board: "Qc 5h 9d 2s 3d",
+              info: [{ label: "Pot", value: "91.5 BB" }],
+              prompt: "They call and check the river. Your action?",
+              options: ["Check", "Bet small, 10 BB", "Go all-in, 55 BB"],
+              answer: 2,
+              explanation: "You almost always have the best hand. A big bet gets called by strong queens. Don't leave value behind.",
+            },
+          ],
+          summary: "Set mining pays off when stacks are deep. Once you hit, build the pot on every street.",
+        },
+        {
+          type: "choice",
+          prompt: "Why is it usually a mistake to slow-play a set on a wet board?",
+          options: [
+            "Draws get a free chance to beat you",
+            "Sets are weak hands",
+            "Slow-playing is against the rules",
+            "Opponents always fold anyway",
+          ],
+          answer: 0,
+          explanation: "Checking lets straight and flush draws see the next card for free. Bet and make them pay.",
+        },
+      ],
+    },
+  ],
+};
+
+export const TOURNAMENT_UNIT: Unit = {
+  id: "tournaments",
+  title: "Tournament Basics",
+  description: "Rising blinds, short stacks and the bubble.",
+  color: "#e35d6a",
+  icon: "🏅",
+  guidebook: [
+    {
+      heading: "How tournaments work",
+      body: "Everyone starts with the same number of chips. Blinds go up at set intervals, and you're out when you lose all your chips. Usually the top 10–20% of finishers get paid.",
+    },
+    {
+      heading: "Count in big blinds",
+      body: "Your stack size in big blinds (BB) matters more than your chip count. 3,000 chips at 100/200 blinds is 15 BB.",
+    },
+    {
+      heading: "Push or fold",
+      body: "With about 10 BB or less, you usually either go all-in or fold. There isn't enough room to raise and then fold to a re-raise.",
+    },
+    {
+      heading: "The bubble",
+      body: "The bubble is the last elimination before the paid places. Busting just before the money is costly, so medium stacks should call all-ins more carefully.",
+    },
+  ],
+  lessons: [
+    {
+      id: "tournaments-1",
+      title: "Structure",
+      exercises: [
+        {
+          type: "choice",
+          prompt: "What happens to the blinds during a tournament?",
+          options: ["They increase at set intervals", "They stay the same", "They go down", "Players vote on them"],
+          answer: 0,
+          explanation: "Rising blinds force action and make sure the tournament finishes.",
+        },
+        {
+          type: "choice",
+          prompt: "You have 3,000 chips and the blinds are 100/200. How many big blinds is that?",
+          options: ["10 BB", "15 BB", "20 BB", "30 BB"],
+          answer: 1,
+          explanation: "3,000 ÷ 200 = 15 big blinds.",
+        },
+        {
+          type: "choice",
+          prompt: "What is the \"bubble\"?",
+          options: [
+            "The last elimination before the paid places",
+            "The final table",
+            "A huge all-in pot",
+            "The first blind level",
+          ],
+          answer: 0,
+          explanation: "The player who busts on the bubble just misses the money.",
+        },
+        {
+          type: "match",
+          prompt: "Match the tournament term",
+          pairs: [
+            ["Ante", "Small forced bet from everyone"],
+            ["Bubble", "Last spot before the money"],
+            ["Short stack", "Few big blinds left"],
+            ["Chip leader", "Most chips in play"],
+          ],
+        },
+        {
+          type: "choice",
+          prompt: "Why do many tournaments add antes in later levels?",
+          options: [
+            "To make the pot bigger and encourage action",
+            "To pay the dealer",
+            "To replace the blinds",
+            "To eliminate short stacks automatically",
+          ],
+          answer: 0,
+          explanation: "Antes put more dead money in the pot, making it worth fighting for.",
+        },
+      ],
+    },
+    {
+      id: "tournaments-2",
+      title: "Short-stack Play",
+      exercises: [
+        {
+          type: "choice",
+          prompt: "With about 10 BB, how should you usually enter a pot?",
+          options: ["All-in or fold", "Min-raise", "Limp", "Call and see a flop"],
+          answer: 0,
+          explanation: "With a short stack, a small raise commits you anyway. Going all-in gets full fold equity.",
+        },
+        {
+          type: "choice",
+          prompt: "Folded to you. Your action?",
+          hand: "As 9c",
+          info: [
+            { label: "Stack", value: "8 BB" },
+            { label: "Position", value: "Button" },
+          ],
+          options: ["Fold", "Min-raise", "All-in"],
+          answer: 2,
+          explanation: "A9o is a strong shove from the button with 8 BB. Only two players are left to act.",
+        },
+        {
+          type: "choice",
+          prompt: "You're first to act. Your action?",
+          hand: "7c 2d",
+          info: [
+            { label: "Stack", value: "8 BB" },
+            { label: "Position", value: "Under the Gun" },
+          ],
+          options: ["Fold", "Min-raise", "All-in"],
+          answer: 0,
+          explanation: "Even short-stacked, 72o from early position is a fold. Wait for a better spot.",
+        },
+        {
+          type: "choice",
+          prompt: "What is \"fold equity\"?",
+          options: [
+            "The extra value from the chance your opponent folds",
+            "The chips you lose when you fold",
+            "Equity after the river",
+            "A side pot",
+          ],
+          answer: 0,
+          explanation: "When you shove, you win either by everyone folding or by having the best hand. Fold equity is the first part.",
+        },
+        {
+          type: "choice",
+          prompt: "You're a medium stack on the bubble. How should you play against a big all-in?",
+          options: [
+            "Call only with very strong hands",
+            "Call much more often",
+            "Always call",
+            "It doesn't change anything",
+          ],
+          answer: 0,
+          explanation: "Busting just before the money is very costly, so medium stacks should tighten their calling ranges on the bubble.",
+        },
+      ],
+    },
+  ],
+};
