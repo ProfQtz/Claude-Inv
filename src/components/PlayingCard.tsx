@@ -12,8 +12,13 @@ export function PlayingCard({ card, size = "md", highlight, dim }: Props) {
   const classes = ["card", size, isRed(card) ? "red" : "black", highlight && "highlight", dim && "dim"];
   return (
     <div className={classes.filter(Boolean).join(" ")} role="img" aria-label={`${RANK_NAME[card.rank]} of ${SUIT_NAME[card.suit]}`}>
-      <span className="card-rank">{rank}</span>
-      <span className="card-suit">{SUIT_SYMBOL[card.suit]}</span>
+      <span className="card-index" aria-hidden="true">
+        <span className="card-rank">{rank}</span>
+        <span className="card-pip">{SUIT_SYMBOL[card.suit]}</span>
+      </span>
+      <span className="card-suit" aria-hidden="true">
+        {SUIT_SYMBOL[card.suit]}
+      </span>
     </div>
   );
 }

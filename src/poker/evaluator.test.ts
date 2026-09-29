@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseCards } from "./cards";
-import { compareHands, describeHand, evaluate, HandCategory } from "./evaluator";
+import { fullDeck, parseCards, shuffle } from "./cards";
+import { compareHands, describeHand, evaluate, HandCategory, score7 } from "./evaluator";
 
 const ev = (s: string) => evaluate(parseCards(s));
 
@@ -61,5 +61,27 @@ describe("compareHands", () => {
 
   it("splits identical ranks regardless of suit", () => {
     expect(cmp("Qh Qd 8s 8c 5h", "Qs Qc 8h 8d 5s")).toBe(0);
+  });
+});
+
+describe("score7", () => {
+  it("agrees with compareHands on random 7-card hands", () => {
+    let seed = 7;
+    const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    for (let i = 0; i < 3000; i++) {
+      const deck = shuffle(fullDeck(), random);
+      const board = deck.slice(0, 5);
+      const a = [...deck.slice(5, 7), ...board];
+      const b = [...deck.slice(7, 9), ...board];
+      const expected = Math.sign(compareHands(evaluate(a), evaluate(b)));
+      expect(Math.sign(score7(a) - score7(b))).toBe(expected);
+    }
+  });
+
+  it("scores categories in order", () => {
+    const s = (c: string) => score7(parseCards(c));
+    expect(s("As Ks Qs Js Ts 2c 3d")).toBeGreaterThan(s("9c 9d 9h 9s Kc 2d 3h"));
+    expect(s("7s 7d 7c Ks Kd Kh 2c")).toBeGreaterThan(s("Ah Kh 9h 6h 3h 2c 2d"));
+    expect(s("5c 4d 3s 2h Ac Kd Qh")).toBeLessThan(s("6c 5d 4s 3h 2c Kd Qh"));
   });
 });

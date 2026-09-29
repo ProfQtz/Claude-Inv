@@ -122,7 +122,7 @@ export function ChoiceView({ exercise, answer, onAnswer, locked, order }: ViewPr
   return (
     <div className="exercise">
       <h2 className="prompt">{exercise.prompt}</h2>
-      {(exercise.hand || exercise.board || exercise.info) && (
+      {(exercise.hand || exercise.board || exercise.info || exercise.villain) && (
         <div className="felt">
           {exercise.info && <TableInfoList info={exercise.info} />}
           {exercise.board && (
@@ -131,11 +131,24 @@ export function ChoiceView({ exercise, answer, onAnswer, locked, order }: ViewPr
               <CardRow cards={exercise.board} />
             </div>
           )}
-          {exercise.hand && (
-            <div className="felt-section">
-              {exercise.board && <span className="felt-label">Your hand</span>}
-              <CardRow cards={exercise.hand} />
+          {exercise.villain ? (
+            <div className="players">
+              <div className="player">
+                <span className="felt-label">Your hand</span>
+                <CardRow cards={exercise.hand ?? ""} />
+              </div>
+              <div className="player">
+                <span className="felt-label">Villain</span>
+                <CardRow cards={exercise.villain} />
+              </div>
             </div>
+          ) : (
+            exercise.hand && (
+              <div className="felt-section">
+                {exercise.board && <span className="felt-label">Your hand</span>}
+                <CardRow cards={exercise.hand} />
+              </div>
+            )
           )}
         </div>
       )}
@@ -399,10 +412,10 @@ export function ScenarioView({
           className={`step-feedback ${choice === step.answer ? "correct" : "wrong"}`}
           role="status"
         >
-          <strong>{choice === step.answer ? "✔ Good decision" : "✘ Better: " + step.options[step.answer]}</strong>
+          <strong>{choice === step.answer ? "Good decision" : `Better: ${step.options[step.answer]}`}</strong>
           <p>{step.explanation}</p>
           {!finished && (
-            <button className="btn btn-blue" onClick={advance} autoFocus>
+            <button className="btn btn-primary" onClick={advance} autoFocus>
               {last ? "Finish hand" : `Deal the ${exercise.steps[stepIndex + 1].street.toLowerCase()}`}
             </button>
           )}

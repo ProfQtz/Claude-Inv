@@ -1,4 +1,5 @@
 import { COURSE, LESSON_ORDER } from "../course/course";
+import type { Skill } from "../course/types";
 
 export const MAX_HEARTS = 5;
 export const HEART_REFILL_MS = 20 * 60 * 1000;
@@ -8,6 +9,23 @@ export const STREAK_FREEZE_GEM_COST = 200;
 export const MAX_STREAK_FREEZES = 2;
 /** Most missed exercises kept for review; the oldest drop off first. */
 export const MAX_REVIEW_ITEMS = 40;
+
+/** Skill accuracy needs this many answers before it counts as measured. */
+export const SKILL_MIN_ATTEMPTS = 5;
+export const DRILL_LENGTHS = [5, 10, 20] as const;
+
+export const MAX_HISTORY = 20;
+
+export interface PracticeRecord {
+  day: string;
+  title: string;
+  accuracy: number;
+}
+
+export interface SkillRecord {
+  attempts: number;
+  correct: number;
+}
 
 export interface LessonRecord {
   completions: number;
@@ -33,6 +51,13 @@ export interface Progress {
   /** Missed course exercises ("lessonId#index") waiting to be reviewed. */
   reviewQueue: string[];
   soundOn: boolean;
+  skills: Partial<Record<Skill, SkillRecord>>;
+  speedBest: number;
+  drillLength: number;
+  /** Day the daily challenge was last completed. */
+  dailyDone: string | null;
+  /** Most recent practice sessions, newest first. */
+  history: PracticeRecord[];
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -52,6 +77,11 @@ export function initialProgress(now = Date.now()): Progress {
     streakFreezes: 0,
     reviewQueue: [],
     soundOn: true,
+    skills: {},
+    speedBest: 0,
+    drillLength: 10,
+    dailyDone: null,
+    history: [],
   };
 }
 
@@ -153,6 +183,9 @@ export interface SessionResult {
   lessonId?: string;
   /** Fraction of exercises answered correctly on the first try. */
   accuracy: number;
+  /** Shown in practice history. */
+  title?: string;
+  daily?: boolean;
 }
 
 export interface Reward {
@@ -165,6 +198,9 @@ export interface Reward {
 
 export function rewardFor(result: SessionResult): Reward {
   const perfect = result.accuracy >= 1;
+  if (result.daily) {
+    return { xp: 20 + (perfect ? 5 : 0), gems: 20, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
+  }
   if (result.lessonId) {
     return { xp: 10 + (perfect ? 5 : 0), gems: perfect ? 10 : 5, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
   }
@@ -216,6 +252,10 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     lessons,
     perfectLessons: p.perfectLessons + (result.lessonId && result.accuracy >= 1 ? 1 : 0),
     drillsCompleted: p.drillsCompleted + (result.lessonId ? 0 : 1),
+    dailyDone: result.daily ? today : p.dailyDone,
+    history: result.lessonId
+      ? p.history
+      : [{ day: today, title: result.title ?? "Practice", accuracy: result.accuracy }, ...p.history].slice(0, MAX_HISTORY),
   };
   return { progress, reward };
 }
@@ -235,6 +275,50 @@ export function clearMistake(p: Progress, ref: string): Progress {
   return { ...p, reviewQueue: p.reviewQueue.filter((r) => r !== ref) };
 }
 
+export function recordSkill(p: Progress, skill: Skill, correct: boolean): Progress {
+  const prev = p.skills[skill] ?? { attempts: 0, correct: 0 };
+  return {
+    ...p,
+    skills: { ...p.skills, [skill]: { attempts: prev.attempts + 1, correct: prev.correct + (correct ? 1 : 0) } },
+  };
+}
+
+/** Accuracy for a skill, or null until it has enough attempts to mean something. */
+export function skillAccuracy(p: Progress, skill: Skill): number | null {
+  const r = p.skills[skill];
+  return r && r.attempts >= SKILL_MIN_ATTEMPTS ? r.correct / r.attempts : null;
+}
+
+/** The skill to practice next: an unmeasured one first, otherwise the weakest. */
+export function recommendSkill(p: Progress, skills: readonly Skill[]): Skill {
+  const unmeasured = skills.filter((s) => skillAccuracy(p, s) === null);
+  if (unmeasured.length > 0) {
+    return unmeasured.reduce((a, b) => ((p.skills[b]?.attempts ?? 0) < (p.skills[a]?.attempts ?? 0) ? b : a));
+  }
+  return skills.reduce((a, b) => (skillAccuracy(p, b)! < skillAccuracy(p, a)! ? b : a));
+}
+
+export type Mastery = "Learning" | "Bronze" | "Silver" | "Gold";
+
+/** Mastery tiers need both volume and accuracy: 10/60%, 25/75%, 50/90%. */
+export function skillMastery(p: Progress, skill: Skill): Mastery {
+  const r = p.skills[skill];
+  if (!r) return "Learning";
+  const acc = r.correct / r.attempts;
+  if (r.attempts >= 50 && acc >= 0.9) return "Gold";
+  if (r.attempts >= 25 && acc >= 0.75) return "Silver";
+  if (r.attempts >= 10 && acc >= 0.6) return "Bronze";
+  return "Learning";
+}
+
+export function isDailyDone(p: Progress, now = Date.now()): boolean {
+  return p.dailyDone === dayKey(now);
+}
+
+export function recordSpeedRound(p: Progress, score: number): Progress {
+  return score > p.speedBest ? { ...p, speedBest: score } : p;
+}
+
 export interface Achievement {
   id: string;
   title: string;
@@ -247,18 +331,19 @@ export function achievements(p: Progress): Achievement[] {
   const completed = LESSON_ORDER.filter((id) => isLessonComplete(p, id)).length;
   const unitsDone = COURSE.filter((u) => u.lessons.every((l) => isLessonComplete(p, l.id))).length;
   return [
-    { id: "first", title: "First Hand", description: "Complete your first lesson", icon: "🎉", unlocked: completed >= 1 },
-    { id: "perfect", title: "Flawless", description: "Finish a lesson with no mistakes", icon: "💎", unlocked: p.perfectLessons >= 1 },
-    { id: "unit", title: "Graduate", description: "Complete a whole unit", icon: "🎓", unlocked: unitsDone >= 1 },
-    { id: "streak3", title: "On a Heater", description: "Reach a 3-day streak", icon: "🔥", unlocked: p.longestStreak >= 3 },
-    { id: "streak7", title: "Grinder", description: "Reach a 7-day streak", icon: "📅", unlocked: p.longestStreak >= 7 },
-    { id: "drills", title: "Table Time", description: "Complete 5 practice drills", icon: "🎯", unlocked: p.drillsCompleted >= 5 },
-    { id: "xp500", title: "High Roller", description: "Earn 500 XP", icon: "💰", unlocked: p.xp >= 500 },
+    { id: "first", title: "First Hand", description: "Complete your first lesson", icon: "party", unlocked: completed >= 1 },
+    { id: "perfect", title: "Flawless", description: "Finish a lesson with no mistakes", icon: "sparkles", unlocked: p.perfectLessons >= 1 },
+    { id: "unit", title: "Graduate", description: "Complete a whole unit", icon: "graduation", unlocked: unitsDone >= 1 },
+    { id: "streak3", title: "On a Heater", description: "Reach a 3-day streak", icon: "flame", unlocked: p.longestStreak >= 3 },
+    { id: "streak7", title: "Grinder", description: "Reach a 7-day streak", icon: "calendar", unlocked: p.longestStreak >= 7 },
+    { id: "drills", title: "Table Time", description: "Complete 5 practice drills", icon: "target", unlocked: p.drillsCompleted >= 5 },
+    { id: "speed", title: "Quick Reads", description: "Score 10 in a Speed Round", icon: "zap", unlocked: p.speedBest >= 10 },
+    { id: "xp500", title: "High Roller", description: "Earn 500 XP", icon: "trending", unlocked: p.xp >= 500 },
     {
       id: "course",
       title: "Shark",
       description: "Finish the entire course",
-      icon: "🦈",
+      icon: "fish",
       unlocked: completed === LESSON_ORDER.length,
     },
   ];
