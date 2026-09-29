@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseCards } from "../poker/cards";
-import { COURSE, exerciseByRef, exerciseRef, LESSON_ORDER } from "./course";
+import { COURSE, drillRef, exerciseByRef, exerciseRef, LESSON_ORDER } from "./course";
 import {
+  countCombos,
   countOuts,
+  generateMix,
   DAILY_LENGTH,
   dailyChallenge,
   EQUITY_BUCKETS,
@@ -105,7 +107,7 @@ describe("drill generator", () => {
   let seed = 42;
   const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
 
-  it.each(["showdown", "handName", "potOdds", "outs", "nuts", "preflop", "mixed"] as const)(
+  it.each(["showdown", "handName", "potOdds", "outs", "nuts", "preflop", "callFold", "combos", "mixed"] as const)(
     "generates valid %s drills",
     (kind) => {
       for (let i = 0; i < 25; i++) generateDrill(kind, 6, random).forEach(checkExercise);
@@ -137,6 +139,57 @@ describe("outs and nuts", () => {
     expect(describeHand(findNuts(parseCards("Kc 9d 4s 2h 7c")).value)).toBe("Three of a Kind, Kings");
     expect(findNuts(parseCards("Th 9h 8h 2c 2d")).value.category).toBe(HandCategory.StraightFlush);
     expect(describeHand(findNuts(parseCards("As Ks Qs Js 2h")).value)).toBe("Royal Flush");
+  });
+});
+
+describe("call-or-fold and combos drills", () => {
+  it("grades calls by exact river equity against the price, never close to the line", () => {
+    for (let i = 0; i < 25; i++) {
+      const e = generateExercise("callFold");
+      if (e.type !== "choice") throw new Error("expected choice");
+      const hero = parseCards(e.hand!);
+      const villain = parseCards(e.villain!);
+      const board = parseCards(e.board!);
+      expect(board).toHaveLength(4);
+      const { equity } = exactEquity(hero, villain, board);
+      const pot = Number(e.info![0].value.slice(1));
+      const bet = Number(e.info![1].value.slice(1));
+      const required = bet / (pot + 2 * bet);
+      expect(Math.abs(equity - required)).toBeGreaterThanOrEqual(0.04);
+      expect(e.options[e.answer]).toBe(equity > required ? "Call" : "Fold");
+    }
+  });
+
+  it("counts combos with blockers", () => {
+    const none = parseCards("2c 3d 7h 8s 9d");
+    expect(countCombos("KK", none)).toBe(6);
+    expect(countCombos("AK", none)).toBe(16);
+    expect(countCombos("AKs", none)).toBe(4);
+    expect(countCombos("AKo", none)).toBe(12);
+    const kingOut = parseCards("Kh 3d 7h 8s 9d");
+    expect(countCombos("KK", kingOut)).toBe(3);
+    expect(countCombos("AK", kingOut)).toBe(12);
+    expect(countCombos("AKs", kingOut)).toBe(3);
+    expect(countCombos("KK", parseCards("Kh Kd 7h 8s 9d"))).toBe(1);
+  });
+
+  it("gives combos drills the counted answer", () => {
+    for (let i = 0; i < 30; i++) {
+      const e = generateExercise("combos");
+      if (e.type !== "choice") throw new Error("expected choice");
+      expect(e.explanation.startsWith(`${e.options[e.answer]} combinations.`)).toBe(true);
+    }
+  });
+
+  it("mixes only the chosen skills", () => {
+    const skills = generateMix(["combos", "preflop"], 6).map((e) => (e.type === "choice" ? e.skill : undefined));
+    expect(new Set(skills)).toEqual(new Set(["combos", "preflop"]));
+  });
+
+  it("round-trips drill exercises through review refs", () => {
+    const e = generateExercise("nuts");
+    expect(exerciseByRef(drillRef(e))).toEqual(e);
+    expect(exerciseByRef("drill:{not json")).toBeUndefined();
   });
 });
 

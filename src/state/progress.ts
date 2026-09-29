@@ -58,6 +58,8 @@ export interface Progress {
   dailyDone: string | null;
   /** Most recent practice sessions, newest first. */
   history: PracticeRecord[];
+  /** Skills chosen last time in "Build a drill". */
+  customMix: Skill[];
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -82,6 +84,7 @@ export function initialProgress(now = Date.now()): Progress {
     drillLength: 10,
     dailyDone: null,
     history: [],
+    customMix: [],
   };
 }
 

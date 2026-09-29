@@ -234,6 +234,118 @@ export function randomEquity(random: Random = Math.random): ChoiceExercise {
   };
 }
 
+const CALL_BET_FRACTIONS = [0.33, 0.5, 0.75, 1, 1.5];
+
+/** Turn decision with a draw: call or fold, graded by exact river equity against the price. */
+export function randomCallFold(random: Random = Math.random): ChoiceExercise {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const deck = shuffle(fullDeck(), random);
+    const [hero, villain, turn] = [deck.slice(0, 2), deck.slice(2, 4), deck.slice(4, 8)];
+    // Hero must be behind right now, so the question is whether the draw is worth the price.
+    if (score7([...hero, ...turn]) >= score7([...villain, ...turn])) continue;
+    const eq = exactEquity(hero, villain, turn);
+    if (eq.equity < 0.04 || eq.equity > 0.5) continue;
+
+    const pot = 10 * (4 + Math.floor(random() * 16));
+    const bet = Math.round(pot * pick(CALL_BET_FRACTIONS, random));
+    const required = potOdds(pot + bet, bet);
+    // Skip close spots: the lesson is the clear-cut math, not a coin flip.
+    if (Math.abs(eq.equity - required) < 0.04) continue;
+
+    const call = eq.equity > required;
+    const rivers = 52 - 8;
+    const wins = Math.round(eq.win * rivers);
+    const ties = Math.round(eq.tie * rivers);
+    return {
+      type: "choice",
+      prompt: "Turn. Villain bets with their cards face up. Call or fold?",
+      hand: codes(hero),
+      board: codes(turn),
+      villain: codes(villain),
+      info: [
+        { label: "Pot before bet", value: `$${pot}` },
+        { label: "Villain bets", value: `$${bet}` },
+      ],
+      options: ["Fold", "Call"],
+      answer: call ? 1 : 0,
+      explanation:
+        `You win on ${wins} of ${rivers} rivers${ties ? ` and tie on ${ties}` : ""}: ${formatPercent(eq.equity)} equity. ` +
+        `Calling $${bet} to win $${pot + bet} needs ${formatPercent(required)}. ` +
+        (call ? "Call: the price is right." : "Fold: the price is too high."),
+      skill: "callFold",
+    };
+  }
+  throw new Error("Could not deal a call-or-fold spot");
+}
+
+/** Villain holdings matching a label ("KK", "AKs", "AKo", or "AK" for any suits) given the cards you can see. */
+export function countCombos(label: string, visible: Card[]): number {
+  const seen = new Set(visible.map(cardCode));
+  const deck = fullDeck().filter((c) => !seen.has(cardCode(c)));
+  let n = 0;
+  for (let i = 0; i < deck.length; i++) {
+    for (let j = i + 1; j < deck.length; j++) {
+      const l = handLabel(deck[i], deck[j]);
+      if (l === label || (label.length === 2 && label[0] !== label[1] && l.slice(0, 2) === label)) n++;
+    }
+  }
+  return n;
+}
+
+const RANK_ORDER = (r: string) => RANKS.indexOf(r as (typeof RANKS)[number]);
+
+/** Count villain's possible combinations of a hand, with your cards and the board as blockers. */
+export function randomCombos(random: Random = Math.random): ChoiceExercise {
+  const deck = shuffle(fullDeck(), random);
+  const hand = deck.slice(0, 2);
+  const flop = deck.slice(2, 5);
+  const visible = [...hand, ...flop];
+  // Most questions use ranks you can see, which is where blockers matter.
+  const pickRank = () => (random() < 0.7 ? pick(visible, random).rank : pick(RANKS, random));
+  const kind = pick(["pair", "any", "suited"] as const, random);
+
+  let a = pickRank();
+  let b = pickRank();
+  while (kind !== "pair" && a === b) b = pick(RANKS, random);
+  if (RANK_ORDER(a) < RANK_ORDER(b)) [a, b] = [b, a];
+  const seenOf = (r: string) => visible.filter((c) => c.rank === r).length;
+  const left = 4 - seenOf(a);
+
+  const question = {
+    pair: {
+      label: a + a,
+      unblocked: 6,
+      prompt: `How many ways can villain hold pocket ${RANK_NAME[a]}s?`,
+      why: `${seenOf(a)} of the four ${RANK_NAME[a]}s ${seenOf(a) === 1 ? "is" : "are"} visible, leaving ${left}. Pairs from ${left} cards: ${left} × ${Math.max(left - 1, 0)} ÷ 2.`,
+    },
+    any: {
+      label: a + b,
+      unblocked: 16,
+      prompt: `How many ${a}${b} combinations (any suits) can villain hold?`,
+      why: `${4 - seenOf(a)} ${RANK_NAME[a]}s × ${4 - seenOf(b)} ${RANK_NAME[b]}s left. With nothing visible it would be 16.`,
+    },
+    suited: {
+      label: a + b + "s",
+      unblocked: 4,
+      prompt: `How many suited ${a}${b} combinations can villain hold?`,
+      why: "Only suits where both cards are still unseen count. With nothing visible it would be 4.",
+    },
+  }[kind];
+
+  const n = countCombos(question.label, visible);
+  const { options, answer } = numberOptions(n, shuffle([question.unblocked, n + 1, n - 1, n + 2, n * 2, n + 4], random), 0);
+  return {
+    type: "choice",
+    prompt: question.prompt,
+    hand: codes(hand),
+    board: codes(flop),
+    options,
+    answer,
+    explanation: `${n} combinations. ${question.why}`,
+    skill: "combos",
+  };
+}
+
 const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   showdown: randomCompare,
   handName: randomHandName,
@@ -242,6 +354,8 @@ const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   nuts: randomNuts,
   preflop: randomPreflop,
   equity: randomEquity,
+  callFold: randomCallFold,
+  combos: randomCombos,
 };
 
 export const SKILLS = Object.keys(MAKERS) as Skill[];
@@ -252,12 +366,15 @@ export function generateExercise(skill: Skill, random: Random = Math.random): Ex
   return MAKERS[skill](random);
 }
 
+/** A drill cycling through the given skills from a random starting point. */
+export function generateMix(skills: readonly Skill[], count = 8, random: Random = Math.random): Exercise[] {
+  if (skills.length === 0) throw new Error("generateMix needs at least one skill");
+  const offset = Math.floor(random() * skills.length);
+  return Array.from({ length: count }, (_, i) => generateExercise(skills[(offset + i) % skills.length], random));
+}
+
 export function generateDrill(kind: DrillKind, count = 8, random: Random = Math.random): Exercise[] {
-  // Mixed drills cycle through the skills from a random starting point.
-  const offset = Math.floor(random() * SKILLS.length);
-  return Array.from({ length: count }, (_, i) =>
-    generateExercise(kind === "mixed" ? SKILLS[(offset + i) % SKILLS.length] : kind, random),
-  );
+  return generateMix(kind === "mixed" ? SKILLS : [kind], count, random);
 }
 
 export interface CompareResult {

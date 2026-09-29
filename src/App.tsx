@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { exerciseByRef, exerciseRef, findLesson } from "./course/course";
-import { dailyChallenge, type DrillKind, generateDrill } from "./course/generator";
+import { drillRef, exerciseByRef, exerciseRef, findLesson } from "./course/course";
+import { dailyChallenge, type DrillKind, generateDrill, generateMix } from "./course/generator";
 import type { Exercise, Skill } from "./course/types";
 import { BottomNav, RightRail, Sidebar, type Tab, TopBar } from "./components/Shell";
 import { playCue } from "./sound";
@@ -78,6 +78,11 @@ export default function App() {
     setSession({ id: Date.now(), title: DRILL_TITLES[kind], exercises: generateDrill(kind, progress.drillLength) });
   }
 
+  function startMix(skills: Skill[]) {
+    update((p) => ({ ...p, customMix: skills }));
+    setSession({ id: Date.now(), title: "Custom Mix", exercises: generateMix(skills, progress.drillLength) });
+  }
+
   function startDaily() {
     setSession({ id: Date.now(), title: "Daily Challenge", exercises: dailyChallenge(dayKey(Date.now())), daily: true });
   }
@@ -113,7 +118,11 @@ export default function App() {
       update((p) => recordSkill(p, skill, correct));
     }
     const ref = active.refs?.[index];
-    if (!ref) return;
+    if (!ref) {
+      // Missed drill hands are saved whole so Review mistakes can deal them again.
+      if (!correct && exercise.type !== "scenario") update((p) => recordMistake(p, drillRef(exercise)));
+      return;
+    }
     // Lessons remember misses; a correct answer in a review clears them.
     if (!correct) update((p) => recordMistake(p, ref));
     else if (active.review) update((p) => clearMistake(p, ref));
@@ -190,6 +199,7 @@ export default function App() {
               onStartReview={startReview}
               onStartSpeed={() => setSpeedRound(true)}
               onOpenRanges={() => setRangesOpen(true)}
+              onStartMix={startMix}
               onSetLength={(n) => update((p) => ({ ...p, drillLength: n }))}
             />
           )

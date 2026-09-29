@@ -1355,7 +1355,21 @@ export function exerciseRef(lessonId: string, index: number): string {
   return `${lessonId}#${index}`;
 }
 
+const DRILL_REF = "drill:";
+
+/** Generated drill exercises have no lesson, so their review ref carries the exercise itself. */
+export function drillRef(exercise: Exercise): string {
+  return DRILL_REF + JSON.stringify(exercise);
+}
+
 export function exerciseByRef(ref: string): Exercise | undefined {
+  if (ref.startsWith(DRILL_REF)) {
+    try {
+      return JSON.parse(ref.slice(DRILL_REF.length)) as Exercise;
+    } catch {
+      return undefined;
+    }
+  }
   const [lessonId, index] = ref.split("#");
   return findLesson(lessonId)?.lesson.exercises[Number(index)];
 }

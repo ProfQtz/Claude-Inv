@@ -2604,7 +2604,7 @@ p {
 
 .tool-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2748,6 +2748,69 @@ p {
 }
 .history-acc.weak {
   color: var(--red);
+}
+
+/* ---------- Build a drill ---------- */
+
+.mixer {
+  max-width: 520px;
+}
+
+.mixer-actions-top {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.mixer-actions-top .btn {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 0.88rem;
+}
+
+.mixer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 420px) {
+  .mixer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mixer-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.mixer-chip svg:first-child {
+  flex-shrink: 0;
+  color: var(--tile-color);
+}
+
+.mixer-chip.on {
+  border-color: var(--tile-color);
+  background: color-mix(in srgb, var(--tile-color) 10%, var(--surface));
+  color: var(--ink);
+}
+
+.mixer-check {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--tile-color);
 }
 
 /* ---------- Opening ranges ---------- */

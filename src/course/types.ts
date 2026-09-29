@@ -7,7 +7,16 @@ export interface TableInfo {
 }
 
 /** Practice skills tracked for generated drill exercises. */
-export type Skill = "showdown" | "handName" | "potOdds" | "outs" | "nuts" | "preflop" | "equity";
+export type Skill =
+  | "showdown"
+  | "handName"
+  | "potOdds"
+  | "outs"
+  | "nuts"
+  | "preflop"
+  | "equity"
+  | "callFold"
+  | "combos";
 
 /** Pick one answer from a list. Used for trivia, hand reading, and fold/call/raise decisions. */
 export interface ChoiceExercise {
