@@ -65,7 +65,7 @@ interface Completion {
 const REVIEW_SIZE = 8;
 
 export default function App() {
-  const { progress, update, reset, now } = useProgress();
+  const { progress, update, reset, replace, now } = useProgress();
   const [tab, setTab] = useState<Tab>("learn");
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
@@ -290,6 +290,7 @@ export default function App() {
             onSetGoal={(xp) => update((p) => ({ ...p, dailyGoal: xp }))}
             onToggleSound={() => update((p) => ({ ...p, soundOn: !p.soundOn }))}
             onReset={reset}
+            onRestore={replace}
           />
         )}
       </main>

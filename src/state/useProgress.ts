@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { initialProgress, migrateProgress, Progress, refillHearts } from "./progress";
 
-const STORAGE_KEY = "pokerlingo.progress.v1";
+export const STORAGE_KEY = "pokerlingo.progress.v1";
 
 function load(): Progress {
   try {

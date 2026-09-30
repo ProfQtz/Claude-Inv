@@ -3496,3 +3496,218 @@ p {
   height: 36px;
   margin: 0;
 }
+
+/* ---------- Profile: path to top 10%, backup, about ---------- */
+
+.track-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, var(--border));
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--gold-soft) 70%, transparent), transparent 55%),
+    var(--surface);
+}
+
+.track-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.track-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.track-head strong {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+}
+
+.track-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.track-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.track-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.track-check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--on-brand);
+}
+
+.track-list li.done .track-check {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
+.track-list .row-text strong {
+  font-size: 0.98rem;
+}
+
+.track-list .row-text > span {
+  font-size: 0.86rem;
+}
+
+.track-value {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.track-list li.done .track-value {
+  color: var(--brand);
+}
+
+.track-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.backup {
+  margin-top: 12px;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.backup-actions .btn {
+  flex: 1 1 180px;
+}
+
+.code-box {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 0.82rem/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  word-break: break-all;
+  resize: vertical;
+}
+
+.code-box:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+
+.restore-label {
+  margin-top: 4px;
+}
+
+.form-error {
+  color: var(--red);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.restore-btn {
+  align-self: flex-start;
+}
+
+.about {
+  display: grid;
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .about {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.about p {
+  color: var(--ink-2);
+  font-size: 0.94rem;
+}
+
+.help-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.94rem;
+}
+
+.help-links a {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+/* ---------- Crash screen ---------- */
+
+.crash {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+
+.crash-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 440px;
+  padding: 28px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.crash-card h1 {
+  font-size: 1.5rem;
+}
+
+.crash-card p {
+  color: var(--ink-2);
+}
+
+.crash-details {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.crash-details summary {
+  cursor: pointer;
+}
+
+.crash-details code {
+  display: block;
+  margin-top: 6px;
+  word-break: break-word;
+}

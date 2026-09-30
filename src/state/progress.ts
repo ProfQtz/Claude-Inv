@@ -1,4 +1,5 @@
 import { COURSE, LESSON_ORDER, sectionLessons } from "../course/course";
+import { SKILLS } from "../course/generator";
 import type { Skill } from "../course/types";
 
 export const MAX_HEARTS = 5;
@@ -96,9 +97,39 @@ export function initialProgress(now = Date.now()): Progress {
  * onboarding existed has clearly started already, so they skip the welcome flow.
  */
 export function migrateProgress(saved: Partial<Progress>, now = Date.now()): Progress {
-  const p = { ...initialProgress(now), ...saved };
-  if (saved.onboarded === undefined) p.onboarded = Object.keys(p.lessons).length > 0 || p.xp > 0;
+  const p = initialProgress(now);
+  const src: Record<string, unknown> = typeof saved === "object" && saved !== null ? saved : {};
+  // Keep only fields whose type matches the default, so a corrupt or hand-edited
+  // save can't put a null where a screen expects a number, list or record.
+  for (const key of Object.keys(p) as (keyof Progress)[]) {
+    if (key in src && sameShape(src[key], p[key])) (p as unknown as Record<string, unknown>)[key] = src[key];
+  }
+  // Then drop malformed entries inside the records and lists.
+  p.xpByDay = keepEntries(p.xpByDay, isNum);
+  p.lessons = keepEntries(p.lessons, (v): v is LessonRecord => isObj(v) && isNum(v.completions) && isNum(v.bestAccuracy));
+  p.skills = keepEntries(p.skills, (v): v is SkillRecord => isObj(v) && isNum(v.attempts) && isNum(v.correct));
+  p.reviewQueue = p.reviewQueue.filter((ref) => typeof ref === "string");
+  p.customMix = p.customMix.filter((skill) => SKILLS.includes(skill));
+  p.history = p.history.filter(
+    (h): h is PracticeRecord => isObj(h) && typeof h.day === "string" && typeof h.title === "string" && isNum(h.accuracy),
+  );
+  if (typeof src.onboarded !== "boolean") p.onboarded = Object.keys(p.lessons).length > 0 || p.xp > 0;
   return p;
+}
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function keepEntries<T>(record: Record<string, unknown>, ok: (v: unknown) => v is T): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([, v]) => ok(v))) as Record<string, T>;
+}
+
+function sameShape(value: unknown, fallback: unknown): boolean {
+  if (fallback === null) return value === null || typeof value === "string";
+  if (Array.isArray(fallback)) return Array.isArray(value);
+  if (typeof fallback === "number") return isNum(value);
+  if (typeof fallback === "object") return isObj(value);
+  return typeof value === typeof fallback;
 }
 
 export const SECTION_TEST_LENGTH = 12;
@@ -395,6 +426,92 @@ export function achievements(p: Progress): Achievement[] {
       description: "Finish the entire course",
       icon: "fish",
       unlocked: completed === LESSON_ORDER.length,
+    },
+  ];
+}
+
+const BACKUP_PREFIX = "PL1.";
+
+/** A portable backup code: a version prefix plus base64-encoded JSON (UTF-8 safe). */
+export function encodeBackup(p: Progress): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(p));
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return BACKUP_PREFIX + btoa(binary);
+}
+
+/** Parse a backup code, or return null if it isn't a valid PokerLingo backup. */
+export function decodeBackup(code: string): Progress | null {
+  const text = code.trim();
+  if (!text.startsWith(BACKUP_PREFIX)) return null;
+  try {
+    const binary = atob(text.slice(BACKUP_PREFIX.length));
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const data = JSON.parse(new TextDecoder().decode(bytes));
+    if (typeof data !== "object" || data === null) return null;
+    if (typeof data.xp !== "number" || typeof data.lessons !== "object" || data.lessons === null) return null;
+    return migrateProgress({ ...data, onboarded: true });
+  } catch {
+    return null;
+  }
+}
+
+export interface Milestone {
+  id: string;
+  title: string;
+  description: string;
+  value: number;
+  target: number;
+}
+
+/** Skills a strong regular uses every session; the track asks for Silver in all of them. */
+export const CORE_SKILLS: Skill[] = ["preflop", "vsOpen", "potOdds", "betMath", "equity", "combos"];
+
+const TIER_RANK: Record<Mastery, number> = { Learning: 0, Bronze: 1, Silver: 2, Gold: 3 };
+
+/**
+ * The "Path to top 10%": finish all three sections and prove the core skills in practice.
+ * It measures knowledge and drill accuracy, not results at real tables.
+ */
+export function topTrack(p: Progress): Milestone[] {
+  const section = (i: number, title: string): Milestone => {
+    const { done, total } = sectionProgress(p, i);
+    return { id: `section-${i}`, title: `Finish ${title}`, description: `${total} lessons`, value: done, target: total };
+  };
+  const tierCount = (tier: Mastery, skills: readonly Skill[]) =>
+    skills.filter((s) => TIER_RANK[skillMastery(p, s)] >= TIER_RANK[tier]).length;
+  const allSkills = Object.keys(p.skills) as Skill[];
+  return [
+    section(0, "Foundations"),
+    section(1, "Winning Fundamentals"),
+    section(2, "Advanced"),
+    {
+      id: "core-silver",
+      title: "Silver in the six core skills",
+      description: "Open or Fold, Facing a Raise, Pot Odds, Bet Math, Hand vs Hand and Combos",
+      value: tierCount("Silver", CORE_SKILLS),
+      target: CORE_SKILLS.length,
+    },
+    {
+      id: "gold-3",
+      title: "Gold in any three skills",
+      description: "50 answers at 90% or better",
+      value: Math.min(3, tierCount("Gold", allSkills)),
+      target: 3,
+    },
+    {
+      id: "speed-15",
+      title: "Score 15 in a Speed Round",
+      description: "Fast, accurate reads under time pressure",
+      value: Math.min(15, p.speedBest),
+      target: 15,
+    },
+    {
+      id: "streak-14",
+      title: "Reach a 14-day streak",
+      description: "Steady practice beats cramming",
+      value: Math.min(14, p.longestStreak),
+      target: 14,
     },
   ];
 }
