@@ -25,7 +25,7 @@ export function PlayingCard({ card, size = "md", highlight, dim }: Props) {
 
 interface RowProps {
   cards: string;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
   /** Card codes to highlight (e.g. the five that make the hand). */
   highlight?: Set<string>;
 }

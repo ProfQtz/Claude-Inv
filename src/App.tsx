@@ -180,11 +180,9 @@ export default function App() {
     // Accuracy counts clear verdicts only; close calls go either way.
     const graded = summary.good + summary.mistakes;
     const accuracy = graded > 0 ? summary.good / graded : 1;
-    const result = {
-      accuracy,
-      title: summary.title,
-      play: { hands: summary.hands, net: summary.net, good: summary.good, checked },
-    };
+    // Close calls and mistakes feed accuracy; lifetime stats keep the rest.
+    const { title, close: _close, mistakes: _mistakes, ...stats } = summary;
+    const result = { accuracy, title, play: { ...stats, checked } };
     const { reward } = completeSession(progress, result);
     update((p) => completeSession(p, result).progress);
     if (progress.soundOn) playCue("complete");
@@ -311,7 +309,11 @@ export default function App() {
   if (playing) {
     return (
       <div className="app focus">
-        <PlayScreen lifetime={{ hands: progress.play.hands, net: progress.play.net }} onExit={finishPlay} />
+        <PlayScreen
+          lifetime={progress.play}
+          onExit={finishPlay}
+          onMistakes={(questions) => update((p) => questions.reduce((q, e) => recordMistake(q, drillRef(e)), p))}
+        />
       </div>
     );
   }

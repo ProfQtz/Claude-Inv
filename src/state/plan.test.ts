@@ -4,6 +4,7 @@ import { dailyPlan, taughtSkills } from "./plan";
 import {
   applyTestOut,
   completeSession,
+  emptyPlayStats,
   EXAM_FIRST_PASS_GEMS,
   EXAM_LENGTH,
   initialProgress,
@@ -124,18 +125,45 @@ describe("saved data", () => {
 
 describe("practice table sessions", () => {
   it("add up lifetime stats, count as practice and pay XP by hands played", () => {
-    const play = { hands: 12, net: -35, good: 5, checked: 7 };
+    const play = {
+      ...emptyPlayStats(),
+      hands: 12,
+      net: -35,
+      good: 5,
+      checked: 7,
+      hands6: 12,
+      vpip6: 3,
+      pfr6: 2,
+      byKind: { call: { good: 2, close: 1, mistakes: 1 } },
+      byStyle: { nit: { good: 1, close: 0, mistakes: 1 } },
+    };
     const first = completeSession(initialProgress(T0), { accuracy: 5 / 6, title: "Play: 6-max table", play }, T0);
     expect(first.reward.xp).toBe(24);
     expect(first.reward.gems).toBe(2);
-    const p = completeSession(first.progress, { accuracy: 1, title: "Play: 6-max table", play: { hands: 3, net: 20, good: 1, checked: 1 } }, T0).progress;
-    expect(p.play).toEqual({ hands: 15, net: -15, good: 6, checked: 8 });
+    const more = {
+      ...emptyPlayStats(),
+      hands: 3,
+      net: 20,
+      good: 1,
+      checked: 1,
+      byKind: { call: { good: 1, close: 0, mistakes: 0 }, bet: { good: 0, close: 0, mistakes: 1 } },
+    };
+    const p = completeSession(first.progress, { accuracy: 1, title: "Play: 6-max table", play: more }, T0).progress;
+    expect(p.play).toMatchObject({ hands: 15, net: -15, good: 6, checked: 8, hands6: 12, vpip6: 3, pfr6: 2 });
+    expect(p.play.byKind).toEqual({ call: { good: 3, close: 1, mistakes: 1 }, bet: { good: 0, close: 0, mistakes: 1 } });
+    expect(p.play.byStyle).toEqual({ nit: { good: 1, close: 0, mistakes: 1 } });
     expect(p.dayLog.drills).toBe(2);
     expect(p.history[0].title).toBe("Play: 6-max table");
     expect(topTrack(p).find((m) => m.id === "play-150")!.value).toBe(6);
   });
 
-  it("repairs malformed play stats", () => {
-    expect(migrateProgress({ play: { hands: "x" } } as never, T0).play).toEqual({ hands: 0, net: 0, good: 0, checked: 0 });
+  it("repairs malformed play stats and keeps the good parts", () => {
+    expect(migrateProgress({ play: { hands: "x" } } as never, T0).play).toEqual(emptyPlayStats());
+    const saved = { hands: 9, net: 12, byKind: { call: { good: 1, close: 0, mistakes: 2 }, fold: null }, byStyle: "bad" };
+    const play = migrateProgress({ play: saved } as never, T0).play;
+    expect(play.hands).toBe(9);
+    expect(play.hands6).toBe(0);
+    expect(play.byKind).toEqual({ call: { good: 1, close: 0, mistakes: 2 } });
+    expect(play.byStyle).toEqual({});
   });
 });

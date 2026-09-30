@@ -1,8 +1,11 @@
-import { Check, ChevronRight, CircleAlert, Eye, FastForward, Info, Minus, Users, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, CircleAlert, Eye, FastForward, Info, Minus, Users, X } from "lucide-react";
 import { type CSSProperties, type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { CardBack, PlayingCard } from "../components/PlayingCard";
+import { CardBack, CardRow, PlayingCard } from "../components/PlayingCard";
+import type { ChoiceExercise } from "../course/types";
 import { chooseBotAction, STYLE_INFO } from "../poker/bots";
-import { type DecisionCheck, reviewHand, type Verdict } from "../poker/coach";
+import { type DecisionCheck, type DecisionKind, reviewHand, type Verdict } from "../poker/coach";
+import { loadHands, saveHand, storedHand, type StoredHand } from "../state/handHistory";
+import { mergeCounts, type PlayStats, type VerdictCounts } from "../state/progress";
 import {
   act,
   type ActionRecord,
@@ -17,18 +20,79 @@ import {
   seatLabel,
   situation,
   type TableAction,
+  type TableStreet,
 } from "../poker/table";
 
 export type TableSetup = { kind: "hu"; style: BotStyle } | { kind: "6max" };
 
-export interface PlaySummary {
+/** A session's results: lifetime play stats plus close calls and mistakes. */
+export interface PlaySummary extends Omit<PlayStats, "checked"> {
   title: string;
-  hands: number;
-  /** Hero's net result in chips. */
-  net: number;
-  good: number;
   close: number;
   mistakes: number;
+}
+
+type SessionStats = Omit<PlaySummary, "title">;
+
+const EMPTY_SESSION: SessionStats = {
+  hands: 0,
+  net: 0,
+  good: 0,
+  close: 0,
+  mistakes: 0,
+  hands6: 0,
+  vpip6: 0,
+  pfr6: 0,
+  byKind: {},
+  byStyle: {},
+};
+
+/** One finished hand as session stats: result, preflop habits and verdicts. */
+function handStats(hand: HandState, checks: DecisionCheck[]): SessionStats {
+  const preflop = hand.log.filter((a) => a.seat === 0 && a.street === "preflop");
+  const six = hand.seats.length === 6 ? 1 : 0;
+  const byKind: Partial<Record<DecisionKind, VerdictCounts>> = {};
+  const byStyle: Partial<Record<BotStyle, VerdictCounts>> = {};
+  const add = <K extends string>(record: Partial<Record<K, VerdictCounts>>, key: K, verdict: Verdict) => {
+    const x = record[key] ?? { good: 0, close: 0, mistakes: 0 };
+    record[key] = {
+      good: x.good + (verdict === "good" ? 1 : 0),
+      close: x.close + (verdict === "close" ? 1 : 0),
+      mistakes: x.mistakes + (verdict === "mistake" ? 1 : 0),
+    };
+  };
+  for (const c of checks) {
+    if (c.verdict === "info") continue;
+    add(byKind, c.kind, c.verdict);
+    if (c.styles.length === 1) add(byStyle, c.styles[0], c.verdict);
+  }
+  return {
+    hands: 1,
+    net: hand.result!.net[0],
+    good: checks.filter((c) => c.verdict === "good").length,
+    close: checks.filter((c) => c.verdict === "close").length,
+    mistakes: checks.filter((c) => c.verdict === "mistake").length,
+    hands6: six,
+    vpip6: six && preflop.some((a) => a.kind === "call" || a.kind === "raise") ? 1 : 0,
+    pfr6: six && preflop.some((a) => a.kind === "raise") ? 1 : 0,
+    byKind,
+    byStyle,
+  };
+}
+
+function addStats(a: SessionStats, b: SessionStats): SessionStats {
+  return {
+    hands: a.hands + b.hands,
+    net: a.net + b.net,
+    good: a.good + b.good,
+    close: a.close + b.close,
+    mistakes: a.mistakes + b.mistakes,
+    hands6: a.hands6 + b.hands6,
+    vpip6: a.vpip6 + b.vpip6,
+    pfr6: a.pfr6 + b.pfr6,
+    byKind: mergeCounts(a.byKind, b.byKind),
+    byStyle: mergeCounts(a.byStyle, b.byStyle),
+  };
 }
 
 const STYLE_COLOR: Record<BotStyle, string> = { nit: "#475569", station: "#0369a1", maniac: "#be123c", regular: "#0f766e" };
@@ -51,10 +115,283 @@ function lineup(setup: TableSetup): PlayerConfig[] {
 export const setupTitle = (setup: TableSetup) =>
   setup.kind === "hu" ? `Heads-up vs the ${STYLE_INFO[setup.style].name}` : "6-max table";
 
+/* ------------------------------------------------------------------ Your game */
+
+const KIND_LABEL: Record<DecisionKind, string> = {
+  preflop: "Preflop charts",
+  call: "Calls",
+  fold: "Folds",
+  bet: "Bets",
+  check: "Checks",
+  raise: "Raises",
+};
+
+const KIND_TIP: Record<DecisionKind, string> = {
+  preflop: "Your preflop play strays from the charts. Review them in the Library.",
+  call: "You call when you're behind too often. Count their value hands before you call.",
+  fold: "You fold when the price is right. Compare your equity with the price before folding.",
+  bet: "Some of your bets lose money. Bet when worse hands call or better hands fold.",
+  check: "You check when a bet earns more. Value bet more, and bluff players who fold too much.",
+  raise: "Raise for value with strong hands, and as a bluff only when folds are likely.",
+};
+
+const graded = (c: VerdictCounts) => c.good + c.mistakes;
+const rightShare = (c: VerdictCounts) => c.good / Math.max(1, graded(c));
+/** Leaks need a few graded decisions and under 80% right. */
+const LEAK_MIN = 6;
+
+function weakest<K extends string>(record: Partial<Record<K, VerdictCounts>>): [K, VerdictCounts] | null {
+  const rows = (Object.entries(record) as [K, VerdictCounts][]).filter(([, c]) => graded(c) >= LEAK_MIN && rightShare(c) < 0.8);
+  return rows.sort((a, b) => rightShare(a[1]) - rightShare(b[1]))[0] ?? null;
+}
+
+function AccuracyRows<K extends string>({ record, label }: { record: Partial<Record<K, VerdictCounts>>; label: (k: K) => string }) {
+  const rows = (Object.entries(record) as [K, VerdictCounts][]).filter(([, c]) => graded(c) + c.close > 0);
+  if (rows.length === 0) return <p className="muted play-note">No graded decisions yet.</p>;
+  return (
+    <ul className="accuracy-rows">
+      {rows.map(([key, c]) => (
+        <li key={key}>
+          <span className="accuracy-label">{label(key)}</span>
+          <span className="accuracy-bar" aria-hidden="true">
+            <span style={{ width: `${rightShare(c) * 100}%` }} />
+          </span>
+          <span className="accuracy-value num">
+            {graded(c) > 0 ? `${Math.round(rightShare(c) * 100)}%` : "—"}
+            <small>
+              {c.good}/{graded(c)}
+              {c.close ? ` · ${c.close} close` : ""}
+            </small>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function YourGame({ stats }: { stats: PlayStats }) {
+  if (stats.hands === 0) return null;
+  const kindLeak = weakest(stats.byKind);
+  const styleLeak = weakest(stats.byStyle);
+  const checkedAll = Object.values(stats.byKind).reduce((sum, c) => sum + graded(c!), 0);
+  return (
+    <section className="your-game" aria-labelledby="your-game-title">
+      <h2 className="section-title" id="your-game-title">
+        Your game
+      </h2>
+      <div className="tool-stats">
+        <div>
+          <span className="eyebrow">Hands</span>
+          <strong className="num">{stats.hands}</strong>
+        </div>
+        <div>
+          <span className="eyebrow">Result</span>
+          <strong className="num">{signedBB(stats.net)}</strong>
+          {stats.hands >= 20 && <small className="num">{((stats.net / BB / stats.hands) * 100).toFixed(1)} bb/100</small>}
+        </div>
+        <div>
+          <span className="eyebrow">Decisions right</span>
+          <strong className="num">{checkedAll ? `${Math.round((stats.good / checkedAll) * 100)}%` : "—"}</strong>
+          <small className="num">{checkedAll} graded</small>
+        </div>
+      </div>
+      {stats.hands6 >= 20 && (
+        <p className="play-note">
+          At 6-max you play <strong className="num">{Math.round((stats.vpip6 / stats.hands6) * 100)}%</strong> of hands and raise{" "}
+          <strong className="num">{Math.round((stats.pfr6 / stats.hands6) * 100)}%</strong> before the flop. Solid winning players are
+          usually around 20 to 26% and 16 to 22%.
+        </p>
+      )}
+      {(kindLeak || styleLeak) && (
+        <div className="leak-card">
+          <span className="icon-tile red">
+            <CircleAlert size={18} aria-hidden="true" />
+          </span>
+          <div>
+            <strong>Biggest leak{kindLeak && styleLeak ? "s" : ""}</strong>
+            {kindLeak && (
+              <p>
+                {KIND_LABEL[kindLeak[0]]}: {Math.round(rightShare(kindLeak[1]) * 100)}% right. {KIND_TIP[kindLeak[0]]}
+              </p>
+            )}
+            {styleLeak && (
+              <p>
+                Against the {STYLE_INFO[styleLeak[0]].name}: {Math.round(rightShare(styleLeak[1]) * 100)}% right. {STYLE_INFO[styleLeak[0]].tip}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="your-game-grid">
+        <div>
+          <h3>By decision</h3>
+          <AccuracyRows record={stats.byKind} label={(k) => KIND_LABEL[k as DecisionKind]} />
+        </div>
+        <div>
+          <h3>By opponent (heads-up)</h3>
+          <AccuracyRows record={stats.byStyle} label={(k) => STYLE_INFO[k as BotStyle].name} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ Hand history */
+
+const STREET_ORDER: TableStreet[] = ["preflop", "flop", "turn", "river"];
+const STREET_TITLE: Record<TableStreet, string> = { preflop: "Preflop", flop: "Flop", turn: "Turn", river: "River" };
+const BOARD_AT: Record<TableStreet, number> = { preflop: 0, flop: 3, turn: 4, river: 5 };
+
+const handTime = (id: number) =>
+  new Date(id).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+function HandDetail({ hand, onBack }: { hand: StoredHand; onBack: () => void }) {
+  useEffect(() => window.scrollTo(0, 0), []);
+  const n = hand.players.length;
+  const hero = hand.players.findIndex((p) => p.human);
+  const board = hand.board.split(" ").filter(Boolean);
+  const streets = STREET_ORDER.map((street) => ({ street, actions: hand.actions.filter((a) => a.street === street) })).filter(
+    (x) => x.actions.length > 0,
+  );
+  const name = (i: number) => (hand.players[i].human ? "You" : hand.players[i].name);
+  const lastStreet = streets[streets.length - 1]?.street ?? "preflop";
+  return (
+    <div className="play-lobby">
+      <header className="play-top">
+        <button className="icon-button" onClick={onBack} aria-label="Back to the lobby">
+          <ArrowLeft size={22} />
+        </button>
+        <span className="play-title">Hand review</span>
+      </header>
+      <div className="play-lobby-body">
+        <header className="page-head">
+          <h1>{hand.table}</h1>
+          <p className="num">
+            {handTime(hand.id)} · <strong className={hand.net[hero] > 0 ? "won" : hand.net[hero] < 0 ? "lost" : ""}>{signedBB(hand.net[hero])}</strong>
+          </p>
+        </header>
+
+        <ul className="history-players">
+          {hand.players.map((p, i) => (
+            <li key={i} className={p.human ? "hero" : ""}>
+              <span className="seat-pos">{seatLabel(n, hand.button, i)}</span>
+              <span className="row-text">
+                <strong>{p.human ? "You" : p.name}</strong>
+                {p.style && <span>{STYLE_INFO[p.style].name}</span>}
+              </span>
+              <CardRow cards={p.hole} size="sm" />
+              <span className={`history-net num ${hand.net[i] > 0 ? "won" : hand.net[i] < 0 ? "lost" : ""}`}>{signedBB(hand.net[i])}</span>
+            </li>
+          ))}
+        </ul>
+
+        {streets.map(({ street, actions }) => (
+          <section key={street} className="history-street">
+            <div className="history-street-head">
+              <strong>{STREET_TITLE[street]}</strong>
+              <span className="muted num">pot {formatBB(actions[0].pot)}</span>
+            </div>
+            {BOARD_AT[street] > 0 && <CardRow cards={board.slice(0, BOARD_AT[street]).join(" ")} size="sm" />}
+            <ol className="history-actions">
+              {actions.map((a, i) => (
+                <li key={i} className={hand.players[a.seat].human ? "hero" : ""}>
+                  {actionText(a, name(a.seat), hand.players[a.seat].human)}
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
+        {board.length > BOARD_AT[lastStreet] && (
+          <section className="history-street">
+            <div className="history-street-head">
+              <strong>Board run out</strong>
+            </div>
+            <CardRow cards={board.join(" ")} size="sm" />
+          </section>
+        )}
+        {hand.showdown && (
+          <section className="history-street">
+            <div className="history-street-head">
+              <strong>Showdown</strong>
+            </div>
+            <ul className="history-actions">
+              {hand.players.map((p, i) =>
+                hand.hands[i] ? (
+                  <li key={i} className={p.human ? "hero" : ""}>
+                    {name(i)}: {hand.hands[i]!.toLowerCase()}
+                    {hand.won[i] > 0 ? ` · won ${formatBB(hand.won[i])}` : ""}
+                  </li>
+                ) : null,
+              )}
+            </ul>
+          </section>
+        )}
+
+        <section className="play-review static">
+          <h2>Coach's review</h2>
+          <ReviewList checks={hand.review} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/** "Won with a flush, nine high", "Folded on the turn" or "Won without showdown". */
+function outcome(h: StoredHand, hero: number): string {
+  const fold = h.actions.find((a) => a.seat === hero && a.kind === "fold");
+  if (fold) return fold.street === "preflop" ? "Folded preflop" : `Folded on the ${fold.street}`;
+  if (!h.showdown) return "Won without showdown";
+  const verb = h.net[hero] > 0 ? "Won" : h.net[hero] < 0 ? "Lost" : "Split the pot";
+  return h.hands[hero] ? `${verb} with ${handPhrase(h.hands[hero]!)}` : verb;
+}
+
+function RecentHands({ hands, onOpen }: { hands: StoredHand[]; onOpen: (h: StoredHand) => void }) {
+  const [all, setAll] = useState(false);
+  if (hands.length === 0) return null;
+  const shown = all ? hands : hands.slice(0, 8);
+  return (
+    <section aria-labelledby="recent-hands-title">
+      <h2 className="section-title" id="recent-hands-title">
+        Recent hands
+      </h2>
+      <ul className="history-list">
+        {shown.map((h) => {
+          const hero = h.players.findIndex((p) => p.human);
+          const mistakes = h.review.filter((r) => r.verdict === "mistake").length;
+          return (
+            <li key={h.id}>
+              <button className="history-row" onClick={() => onOpen(h)}>
+                <CardRow cards={h.players[hero].hole} size="xs" />
+                <span className="row-text">
+                  <strong>{outcome(h, hero)}</strong>
+                  <span>
+                    {h.players.length === 2 ? `vs ${h.players[1 - hero].name}` : "6-max"} · {handTime(h.id)}
+                    {mistakes > 0 ? ` · ${mistakes} ${mistakes === 1 ? "mistake" : "mistakes"}` : ""}
+                  </span>
+                </span>
+                <span className={`history-net num ${h.net[hero] > 0 ? "won" : h.net[hero] < 0 ? "lost" : ""}`}>{signedBB(h.net[hero])}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {hands.length > shown.length && (
+        <button className="btn btn-ghost history-more" onClick={() => setAll(true)}>
+          Show all {hands.length}
+        </button>
+      )}
+      <p className="muted play-note">Hand history stays on this device and isn't part of backups.</p>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------------ Lobby */
 
-function Lobby({ onPick, onBack, lifetime }: { onPick: (s: TableSetup) => void; onBack: () => void; lifetime: { hands: number; net: number } }) {
+function Lobby({ onPick, onBack, lifetime }: { onPick: (s: TableSetup) => void; onBack: () => void; lifetime: PlayStats }) {
   useEffect(() => window.scrollTo(0, 0), []);
+  const [hands] = useState(loadHands);
+  const [viewing, setViewing] = useState<StoredHand | null>(null);
+  if (viewing) return <HandDetail hand={viewing} onBack={() => setViewing(null)} />;
   return (
     <div className="play-lobby">
       <header className="play-top">
@@ -71,12 +408,7 @@ function Lobby({ onPick, onBack, lifetime }: { onPick: (s: TableSetup) => void; 
             price and against the hands that opponent plays that way.
           </p>
         </header>
-        {lifetime.hands > 0 && (
-          <p className="play-lifetime num">
-            You've played {lifetime.hands} hands: {signedBB(lifetime.net)}
-            {lifetime.hands >= 20 && ` (${((lifetime.net / BB / lifetime.hands) * 100).toFixed(1)} bb/100)`}
-          </p>
-        )}
+        <YourGame stats={lifetime} />
 
         <h2 className="section-title">Heads-up</h2>
         <p className="muted play-note">One opponent, every hand. Learn how to beat each type of player.</p>
@@ -116,6 +448,8 @@ function Lobby({ onPick, onBack, lifetime }: { onPick: (s: TableSetup) => void; 
           <ChevronRight className="row-chevron" size={20} aria-hidden="true" />
         </button>
         <p className="muted play-note">Stacks reset to 100 BB every hand. Blinds are 0.5 and 1 BB.</p>
+
+        <RecentHands hands={hands} onOpen={setViewing} />
       </div>
     </div>
   );
@@ -125,7 +459,13 @@ function Lobby({ onPick, onBack, lifetime }: { onPick: (s: TableSetup) => void; 
 
 const signedBB = (chips: number) => `${chips > 0 ? "+" : chips < 0 ? "−" : ""}${formatBB(Math.abs(chips))}`;
 
-function actionText(a: ActionRecord, name: string, you: boolean): string {
+/** A made hand's name for a sentence: "a flush, nine high", "two pair, nines and sevens". */
+const handPhrase = (name: string) => {
+  const hand = name.toLowerCase();
+  return /^(royal|straight|full|flush|pair)/.test(hand) ? `a ${hand}` : hand;
+};
+
+function actionText(a: Pick<ActionRecord, "kind" | "amount" | "to" | "allIn">, name: string, you: boolean): string {
   const verb = (base: string) => (you ? base : base.replace(/^(\w+)/, (w) => `${w}${w.endsWith("h") ? "es" : "s"}`));
   const allIn = a.allIn ? " (all-in)" : "";
   switch (a.kind) {
@@ -328,16 +668,16 @@ const VERDICT_ICON: Record<Verdict, { icon: typeof Check; label: string }> = {
   info: { icon: Info, label: "Note" },
 };
 
-function ReviewList({ checks }: { checks: DecisionCheck[] }) {
+function ReviewList({ checks }: { checks: Pick<DecisionCheck, "title" | "verdict" | "detail">[] }) {
   if (checks.length === 0) {
-    return <p className="muted review-empty">No decisions to check this hand: the coach grades calls, folds, river bets and charted preflop spots.</p>;
+    return <p className="muted review-empty">No decisions to check this hand. The coach grades charted preflop spots, calls and folds against a bet, and heads-up bets and checks when you act last.</p>;
   }
   return (
     <ul className="review-list">
-      {checks.map((c) => {
+      {checks.map((c, i) => {
         const { icon: Icon, label } = VERDICT_ICON[c.verdict];
         return (
-          <li key={c.index} className={`review-item ${c.verdict}`}>
+          <li key={i} className={`review-item ${c.verdict}`}>
             <span className="review-icon" aria-label={label}>
               <Icon size={16} strokeWidth={3} aria-hidden="true" />
             </span>
@@ -369,20 +709,29 @@ function resultLine(hand: HandState): string {
   const names = (i: number) => (hand.seats[i].human ? "You" : hand.seats[i].name);
   if (!r.showdown) return `${names(winners[0])} ${hand.seats[winners[0]].human ? "win" : "wins"} ${formatBB(r.won[winners[0]])}.`;
   return winners
-    .map((i) => `${names(i)} ${hand.seats[i].human ? "win" : "wins"} ${formatBB(r.won[i])} with ${r.hands[i]?.toLowerCase()}`)
+    .map((i) => `${names(i)} ${hand.seats[i].human ? "win" : "wins"} ${formatBB(r.won[i])} with ${handPhrase(r.hands[i] ?? "")}`)
     .join("; ")
     .concat(".");
 }
 
 /* ------------------------------------------------------------------ Table */
 
-function Table({ setup, onLeave }: { setup: TableSetup; onLeave: (s: PlaySummary) => void }) {
+function Table({
+  setup,
+  onLeave,
+  onMistakes,
+}: {
+  setup: TableSetup;
+  onLeave: (s: PlaySummary) => void;
+  /** Review questions for the hand's mistakes, saved as they happen. */
+  onMistakes: (exercises: ChoiceExercise[]) => void;
+}) {
   const players = useMemo(() => lineup(setup), [setup]);
   const n = players.length;
   const [handNo, setHandNo] = useState(1);
   const [hand, setHand] = useState<HandState>(() => newHand(players, 0, 1));
-  const [review, setReview] = useState<DecisionCheck[] | null>(null);
-  const [stats, setStats] = useState({ hands: 0, net: 0, good: 0, close: 0, mistakes: 0 });
+  const [reviewed, setReviewed] = useState<{ handNo: number; checks: DecisionCheck[] } | null>(null);
+  const [stats, setStats] = useState<SessionStats>(EMPTY_SESSION);
   const [reveal, setReveal] = useState(false);
   const [fast, setFast] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -406,19 +755,19 @@ function Table({ setup, onLeave }: { setup: TableSetup; onLeave: (s: PlaySummary
     return () => cancelAnimationFrame(frame);
   }, [heroTurnNow, hand.handNo]);
 
-  // Record the hand once, where it ends, so a finished hand is never counted twice.
+  // Record the hand once, where it ends, so a finished hand is never counted twice. The
+  // review runs just after the result is on screen: a long hand can take a moment to check.
   function commit(next: HandState) {
     setHand(next);
     if (!next.result) return;
-    const checks = reviewHand(next, 0);
-    setReview(checks);
-    setStats((s) => ({
-      hands: s.hands + 1,
-      net: s.net + next.result!.net[0],
-      good: s.good + checks.filter((c) => c.verdict === "good").length,
-      close: s.close + checks.filter((c) => c.verdict === "close").length,
-      mistakes: s.mistakes + checks.filter((c) => c.verdict === "mistake").length,
-    }));
+    setTimeout(() => {
+      const checks = reviewHand(next, 0);
+      setReviewed({ handNo: next.handNo, checks });
+      saveHand(storedHand(next, setupTitle(setup), checks));
+      setStats((s) => addStats(s, handStats(next, checks)));
+      const questions = checks.flatMap((c) => (c.exercise ? [c.exercise] : []));
+      if (questions.length) onMistakes(questions);
+    }, 50);
   }
 
   useEffect(() => {
@@ -440,11 +789,11 @@ function Table({ setup, onLeave }: { setup: TableSetup; onLeave: (s: PlaySummary
     const no = handNo + 1;
     setHandNo(no);
     setHand(newHand(players, (no - 1) % n, no));
-    setReview(null);
     setReveal(false);
   }
 
   const heroTurn = !hand.result && hand.toAct === 0;
+  const review = hand.result && reviewed?.handNo === hand.handNo ? reviewed.checks : null;
   const recent = hand.log.slice(-3).map((a) => {
     const you = hand.seats[a.seat].human;
     return actionText(a, you ? "You" : hand.seats[a.seat].name, you);
@@ -504,7 +853,7 @@ function Table({ setup, onLeave }: { setup: TableSetup; onLeave: (s: PlaySummary
         </button>
         <span className="play-title">{setupTitle(setup)}</span>
         <span className="play-score num" title="Your result this session">
-          {stats.hands} hands · {signedBB(stats.net)}
+          {stats.hands} {stats.hands === 1 ? "hand" : "hands"} · {signedBB(stats.net)}
         </span>
         <button className={`icon-button ${fast ? "on" : ""}`} onClick={() => setFast((f) => !f)} aria-pressed={fast} aria-label="Fast bots">
           <FastForward size={20} />
@@ -526,13 +875,13 @@ function Table({ setup, onLeave }: { setup: TableSetup; onLeave: (s: PlaySummary
         <SeatView hand={hand} index={0} reveal={reveal} compact={false} seatRef={heroSeat} />
       </main>
 
-      {hand.result && review && (
+      {review && (
         <section className="play-review" id="hand-review" aria-labelledby="review-title">
           <h2 id="review-title">Coach's review</h2>
           <ReviewList checks={review} />
           <p className="muted review-note">
             Opponents play fixed styles, so the coach knows every hand they would play this way. Equity is against those
-            hands, not just the cards they held.
+            hands, not just the cards they held. Clear mistakes are added to Review mistakes on the Practice tab.
           </p>
         </section>
       )}
@@ -581,12 +930,14 @@ function Table({ setup, onLeave }: { setup: TableSetup; onLeave: (s: PlaySummary
 export function PlayScreen({
   lifetime,
   onExit,
+  onMistakes,
 }: {
-  lifetime: { hands: number; net: number };
+  lifetime: PlayStats;
   /** Called with the session's results, or null if no hand was finished. */
   onExit: (summary: PlaySummary | null) => void;
+  onMistakes: (exercises: ChoiceExercise[]) => void;
 }) {
   const [setup, setSetup] = useState<TableSetup | null>(null);
   if (!setup) return <Lobby onPick={setSetup} onBack={() => onExit(null)} lifetime={lifetime} />;
-  return <Table key={JSON.stringify(setup)} setup={setup} onLeave={(s) => onExit(s.hands > 0 ? s : null)} />;
+  return <Table key={JSON.stringify(setup)} setup={setup} onLeave={(s) => onExit(s.hands > 0 ? s : null)} onMistakes={onMistakes} />;
 }

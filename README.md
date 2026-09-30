@@ -62,17 +62,26 @@ real table also depend on experience, bankroll discipline and game selection.
 - The opponents are probability policies: preflop they rank hands by the Chen
   formula (the Regular follows the 6-max charts), and postflop they act on
   hand strength, draws, position, initiative and the price, each in its own
-  style.
+  style. Out of position, a player who didn't raise before the flop usually
+  checks to the raiser, as real players do.
 - After every hand the coach reviews your decisions. Because each opponent's
   strategy is known, it rebuilds the exact range of hands that opponent would
   have played the way it did. It then grades:
-  - preflop opens and responses to a raise against the charts (6-max);
+  - preflop opens and responses to a raise against the charts (6-max, where a
+    chart covers the spot);
   - every call and fold against a bet, by your equity against those ranges
     versus the price;
-  - river bets and checks when you're last to act heads-up, by comparing the
-    EV of betting with checking given how the opponent responds.
-- Session results, lifetime stats and a "150 good decisions" milestone on the
-  Path to top 10%.
+  - bets and checks on the flop, turn and river when you're last to act
+    heads-up after a check, by comparing the EV of betting with checking given
+    how the opponent responds to each size.
+- Clear mistakes become review questions: the spot comes back in the mistakes
+  review with the answer and the numbers behind it.
+- **Your game**: lifetime results, the share of decisions you got right by type
+  (preflop, calls, folds, bets, checks) and by opponent, how often you play and
+  raise hands at 6-max, and your biggest leak with a tip to fix it.
+- **Hand history**: your last 30 hands with every player's cards, the action
+  street by street and the coach's review.
+- Session results and a "150 good decisions" milestone on the Path to top 10%.
 
 **Library**
 - Strategy charts: a heads-up push/fold Nash equilibrium solved in the browser
@@ -90,7 +99,8 @@ real table also depend on experience, bankroll discipline and game selection.
 - XP, daily goal, day streaks with streak freezes, levels, gems, a shop and
   9 achievements.
 - Progress is saved in the browser (`localStorage`). The Profile tab can copy or
-  download a backup code and restore it on another device.
+  download a backup code and restore it on another device. Practice-table hand
+  history stays on the device and isn't part of the backup.
 - Keyboard: number keys pick an answer, Enter checks and continues.
 
 ### What is exact and what is simplified
@@ -105,7 +115,9 @@ range (two pair or better, or a missed draw).
 The practice-table opponents play fixed, readable styles, not equilibrium
 strategies. The coach's equity numbers are exact against the ranges those
 styles produce (sampled where the board isn't complete). On the flop and turn
-they ignore later betting, so the coach treats close spots as close.
+the coach looks at the current street only, with equity standing in for the
+rest of the hand, so it needs a bigger difference there before it calls a
+decision a mistake.
 
 ## Development
 

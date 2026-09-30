@@ -372,7 +372,7 @@ export function ProfileScreen({ progress, now, onSetGoal, onToggleSound, onReset
               <TriangleAlert size={28} aria-hidden="true" />
             </span>
             <h3>Reset everything?</h3>
-            <p>Your XP, streak, gems and lesson progress will be erased. This can't be undone.</p>
+            <p>Your XP, streak, gems, lesson progress and hand history will be erased. This can't be undone.</p>
             <button className="btn btn-secondary" onClick={() => setConfirmReset(false)} autoFocus>
               Keep my progress
             </button>

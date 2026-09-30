@@ -1,6 +1,8 @@
 import { COURSE, LESSON_ORDER, SECTIONS, sectionLessons } from "../course/course";
 import { SKILLS } from "../course/generator";
 import type { Skill } from "../course/types";
+import type { DecisionKind } from "../poker/coach";
+import type { BotStyle } from "../poker/table";
 
 export const MAX_HEARTS = 5;
 export const HEART_REFILL_MS = 20 * 60 * 1000;
@@ -33,12 +35,51 @@ export interface LessonRecord {
   bestAccuracy: number;
 }
 
+export interface VerdictCounts {
+  good: number;
+  close: number;
+  mistakes: number;
+}
+
 /** Lifetime results at the practice table. Net is in chips (10 per big blind). */
 export interface PlayStats {
   hands: number;
   net: number;
   good: number;
   checked: number;
+  /** 6-max hands, and how many of them you voluntarily played and raised preflop. */
+  hands6: number;
+  vpip6: number;
+  pfr6: number;
+  /** Coach verdicts by kind of decision and, heads-up, by opponent style. */
+  byKind: Partial<Record<DecisionKind, VerdictCounts>>;
+  byStyle: Partial<Record<BotStyle, VerdictCounts>>;
+}
+
+export const emptyPlayStats = (): PlayStats => ({
+  hands: 0,
+  net: 0,
+  good: 0,
+  checked: 0,
+  hands6: 0,
+  vpip6: 0,
+  pfr6: 0,
+  byKind: {},
+  byStyle: {},
+});
+
+/** Add verdict counts key by key. */
+export function mergeCounts<K extends string>(
+  a: Partial<Record<K, VerdictCounts>>,
+  b: Partial<Record<K, VerdictCounts>>,
+): Partial<Record<K, VerdictCounts>> {
+  const out: Partial<Record<K, VerdictCounts>> = { ...a };
+  for (const key of Object.keys(b) as K[]) {
+    const x = out[key] ?? { good: 0, close: 0, mistakes: 0 };
+    const y = b[key]!;
+    out[key] = { good: x.good + y.good, close: x.close + y.close, mistakes: x.mistakes + y.mistakes };
+  }
+  return out;
 }
 
 /** What was finished on one day, for the daily study plan. */
@@ -115,7 +156,7 @@ export function initialProgress(now = Date.now()): Progress {
     dayLog: { day: "", lessons: 0, drills: 0, reviews: 0 },
     examBest: 0,
     examPassedOn: null,
-    play: { hands: 0, net: 0, good: 0, checked: 0 },
+    play: emptyPlayStats(),
   };
 }
 
@@ -140,8 +181,7 @@ export function migrateProgress(saved: Partial<Progress>, now = Date.now()): Pro
   p.history = p.history.filter(
     (h): h is PracticeRecord => isObj(h) && typeof h.day === "string" && typeof h.title === "string" && isNum(h.accuracy),
   );
-  const play = p.play as unknown as Record<string, unknown>;
-  if (!(isNum(play.hands) && isNum(play.net) && isNum(play.good) && isNum(play.checked))) p.play = initialProgress(now).play;
+  p.play = cleanPlay(p.play);
   const log = p.dayLog as unknown as Record<string, unknown>;
   if (!(typeof log.day === "string" && isNum(log.lessons) && isNum(log.drills) && isNum(log.reviews))) {
     p.dayLog = initialProgress(now).dayLog;
@@ -151,6 +191,20 @@ export function migrateProgress(saved: Partial<Progress>, now = Date.now()): Pro
 }
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+const isCounts = (v: unknown): v is VerdictCounts => isObj(v) && isNum(v.good) && isNum(v.close) && isNum(v.mistakes);
+
+/** Play stats with missing numbers set to zero and malformed count entries dropped. */
+function cleanPlay(saved: unknown): PlayStats {
+  const out = emptyPlayStats();
+  if (!isObj(saved)) return out;
+  for (const key of ["hands", "net", "good", "checked", "hands6", "vpip6", "pfr6"] as const) {
+    if (isNum(saved[key])) out[key] = saved[key] as number;
+  }
+  if (isObj(saved.byKind)) out.byKind = keepEntries(saved.byKind, isCounts);
+  if (isObj(saved.byStyle)) out.byStyle = keepEntries(saved.byStyle, isCounts);
+  return out;
+}
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function keepEntries<T>(record: Record<string, unknown>, ok: (v: unknown) => v is T): Record<string, T> {
@@ -419,6 +473,11 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
           net: p.play.net + result.play.net,
           good: p.play.good + result.play.good,
           checked: p.play.checked + result.play.checked,
+          hands6: p.play.hands6 + result.play.hands6,
+          vpip6: p.play.vpip6 + result.play.vpip6,
+          pfr6: p.play.pfr6 + result.play.pfr6,
+          byKind: mergeCounts(p.play.byKind, result.play.byKind),
+          byStyle: mergeCounts(p.play.byStyle, result.play.byStyle),
         }
       : p.play,
   };

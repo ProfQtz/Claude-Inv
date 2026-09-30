@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { clearHands } from "./handHistory";
 import { initialProgress, migrateProgress, Progress, refillHearts } from "./progress";
 
 export const STORAGE_KEY = "pokerlingo.progress.v1";
@@ -43,7 +44,11 @@ export function useProgress() {
 
   const update = useCallback((fn: (p: Progress) => Progress) => setProgress((p) => fn(p)), []);
   // A reset keeps the player past the welcome flow; they chose to start over, not to see it again.
-  const reset = useCallback(() => setProgress({ ...initialProgress(), onboarded: true }), []);
+  // It also forgets the practice table's hand history.
+  const reset = useCallback(() => {
+    clearHands();
+    setProgress({ ...initialProgress(), onboarded: true });
+  }, []);
   const replace = useCallback((p: Progress) => setProgress(refillHearts(p)), []);
 
   return { progress, update, reset, replace, now };
