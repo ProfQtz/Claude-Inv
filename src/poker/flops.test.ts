@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { seededRandom } from "../course/generator";
 import { fullDeck, parseCards } from "./cards";
 import { CANONICAL_FLOPS, flopIndex, flopKey, FLOP_SPOTS, randomSuits } from "./flops";
 import { flopEquities, raiserEquity } from "./flopEdge";
@@ -43,6 +44,9 @@ describe("flop equity table", () => {
   });
 
   it("matches fresh sampling", () => {
+    // Each table entry is itself a 20,000-deal sample, with a standard error of about 0.0035.
+    // A larger seeded sample keeps the check repeatable; 0.015 is over four of those errors.
+    const random = seededRandom("flop-table");
     for (const spot of FLOP_SPOTS) {
       for (const text of ["As Kd 7c", "7h 6h 5d", "Qc Jc Td", "2c 2d 7h"]) {
         const flop = parseCards(text);
@@ -50,7 +54,8 @@ describe("flop equity table", () => {
           rangeCombos(OPENING_SETS[spot.raiser], flop),
           rangeCombos(FACING_SETS[spot.facing].call, flop),
           flop,
-          20000,
+          50000,
+          random,
         );
         expect(Math.abs(raiserEquity(spot.id, flop) - sampled), `${spot.id} ${text}`).toBeLessThan(0.015);
       }

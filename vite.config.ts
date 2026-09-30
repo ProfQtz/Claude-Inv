@@ -12,5 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Some tests simulate thousands of hands; give slower CI machines room to finish.
+    testTimeout: 30_000,
   },
 });
