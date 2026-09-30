@@ -10,7 +10,7 @@ import type {
   TableInfo,
 } from "../course/types";
 import { describeHand } from "../poker/evaluator";
-import { shuffle } from "../poker/cards";
+import { prettyCards, shuffle } from "../poker/cards";
 import { CardRow } from "./PlayingCard";
 
 /** The learner's in-progress answer for a gradable exercise. */
@@ -69,7 +69,7 @@ export function feedbackText(exercise: Exercise): string {
 export function correctAnswerText(exercise: Exercise): string | null {
   switch (exercise.type) {
     case "choice":
-      return exercise.options[exercise.answer];
+      return exercise.cardOptions ? prettyCards(exercise.options[exercise.answer]) : exercise.options[exercise.answer];
     case "compare":
       return COMPARE_OPTIONS[[0, 1, -1].indexOf(resolveCompare(exercise).winner)];
     case "order":
@@ -107,13 +107,15 @@ function OptionButton(props: {
   selected: boolean;
   state?: "correct" | "wrong";
   disabled: boolean;
+  /** The label is a card list, shown as small cards. */
+  cards?: boolean;
   onClick: () => void;
 }) {
-  const cls = ["option", props.selected && "selected", props.state].filter(Boolean).join(" ");
+  const cls = ["option", props.selected && "selected", props.state, props.cards && "card-option"].filter(Boolean).join(" ");
   return (
-    <button className={cls} disabled={props.disabled} onClick={props.onClick}>
+    <button className={cls} disabled={props.disabled} onClick={props.onClick} aria-label={props.cards ? prettyCards(props.label) : undefined}>
       <span className="option-key">{props.index + 1}</span>
-      <span>{props.label}</span>
+      {props.cards ? <CardRow cards={props.label} size="sm" /> : <span>{props.label}</span>}
     </button>
   );
 }
@@ -158,6 +160,7 @@ export function ChoiceView({ exercise, answer, onAnswer, locked, order }: ViewPr
             key={optionIndex}
             index={i}
             label={exercise.options[optionIndex]}
+            cards={exercise.cardOptions}
             selected={answer === optionIndex}
             disabled={locked}
             state={

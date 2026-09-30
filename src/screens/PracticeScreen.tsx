@@ -1,5 +1,5 @@
-import { CalendarCheck, Check, ChevronRight, Gem, Heart, Play, Timer, Trophy } from "lucide-react";
-import type { CSSProperties } from "react";
+import { CalendarCheck, Check, ChevronRight, Gem, Heart, Play, Spade, Timer, Trophy } from "lucide-react";
+import { type CSSProperties, useState } from "react";
 import { DAILY_LENGTH, type DrillKind, SKILLS } from "../course/generator";
 import type { Skill } from "../course/types";
 import { NamedIcon } from "../components/Icons";
@@ -65,6 +65,48 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
     icon: "calculator",
     color: "#4957c9",
   },
+  callFold: {
+    title: "Call or Fold",
+    description: "Is your draw worth the price on the turn?",
+    icon: "scale",
+    color: "#2f8f5b",
+  },
+  vsOpen: {
+    title: "Facing a Raise",
+    description: "3-bet, call or fold against an open.",
+    icon: "shield",
+    color: "#b45309",
+  },
+  betMath: {
+    title: "Bet Math",
+    description: "MDF, bluff odds, EV and implied odds.",
+    icon: "sigma",
+    color: "#0369a1",
+  },
+  pushFold: {
+    title: "Push or Fold",
+    description: "Short-stack shoves and calls, graded by a Nash solver.",
+    icon: "cpu",
+    color: "#1f6f8b",
+  },
+  bluffCatch: {
+    title: "Bluff-Catching",
+    description: "Count villain's value and bluffs on the river, then call or fold.",
+    icon: "scan-eye",
+    color: "#7c3aed",
+  },
+  rangeEdge: {
+    title: "Range Advantage",
+    description: "Which flop favours the preflop raiser?",
+    icon: "radar",
+    color: "#0f766e",
+  },
+  combos: {
+    title: "Combos & Blockers",
+    description: "Count the hands villain can still hold.",
+    icon: "blocks",
+    color: "#b5651d",
+  },
   mixed: {
     title: "Mixed Session",
     description: "Every skill, for daily reps.",
@@ -74,7 +116,22 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
 };
 
 /** Skills in the order they appear on the Practice tab: preflop to river to math. */
-const SKILL_ORDER: Skill[] = ["preflop", "showdown", "handName", "nuts", "outs", "equity", "potOdds"];
+export const SKILL_ORDER: Skill[] = [
+  "preflop",
+  "vsOpen",
+  "pushFold",
+  "showdown",
+  "handName",
+  "nuts",
+  "combos",
+  "outs",
+  "equity",
+  "potOdds",
+  "betMath",
+  "callFold",
+  "rangeEdge",
+  "bluffCatch",
+];
 
 export const DRILL_TITLES: Record<DrillKind, string> = Object.fromEntries(
   Object.entries(DRILL_INFO).map(([k, v]) => [k, v.title]),
@@ -88,7 +145,76 @@ interface Props {
   onStartReview: () => void;
   onStartSpeed: () => void;
   onOpenRanges: () => void;
+  onStartMix: (skills: Skill[]) => void;
   onSetLength: (length: number) => void;
+  onStartPlay: () => void;
+}
+
+/** Pick any combination of skills for a custom drill. */
+function MixBuilder(props: {
+  initial: Skill[];
+  length: number;
+  onClose: () => void;
+  onStart: (skills: Skill[]) => void;
+}) {
+  const [chosen, setChosen] = useState<Set<Skill>>(() => new Set(props.initial.length ? props.initial : SKILL_ORDER));
+  const toggle = (skill: Skill) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(skill)) next.delete(skill);
+      else next.add(skill);
+      return next;
+    });
+  const selected = SKILL_ORDER.filter((s) => chosen.has(s));
+
+  return (
+    <div className="modal-backdrop" onClick={props.onClose}>
+      <div
+        className="modal mixer"
+        role="dialog"
+        aria-labelledby="mixer-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="icon-disc brand">
+          <NamedIcon name="sliders" size={28} />
+        </span>
+        <h3 id="mixer-title">Build a drill</h3>
+        <p>Choose the skills to mix. Questions rotate through them.</p>
+        <div className="mixer-actions-top">
+          <button className="btn btn-ghost" onClick={() => setChosen(new Set(SKILL_ORDER))}>
+            Select all
+          </button>
+          <button className="btn btn-ghost" onClick={() => setChosen(new Set())}>
+            Clear
+          </button>
+        </div>
+        <div className="mixer-grid">
+          {SKILL_ORDER.map((skill) => {
+            const d = DRILL_INFO[skill];
+            const on = chosen.has(skill);
+            return (
+              <button
+                key={skill}
+                role="checkbox"
+                aria-checked={on}
+                className={`mixer-chip ${on ? "on" : ""}`}
+                style={{ "--tile-color": d.color } as CSSProperties}
+                onClick={() => toggle(skill)}
+              >
+                <NamedIcon name={d.icon} size={18} />
+                {d.title}
+                {on && <Check size={16} strokeWidth={3} className="mixer-check" aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </div>
+        <button className="btn btn-primary" disabled={selected.length === 0} onClick={() => props.onStart(selected)}>
+          <Play size={16} fill="currentColor" aria-hidden="true" />
+          Start {props.length} questions
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function SkillMeter({ progress, skill }: { progress: Progress; skill: Skill }) {
@@ -120,7 +246,9 @@ function formatDay(day: string, today: string) {
 }
 
 export function PracticeScreen(props: Props) {
-  const { progress, now, onStart, onStartDaily, onStartReview, onStartSpeed, onOpenRanges, onSetLength } = props;
+  const { progress, now, onStart, onStartDaily, onStartReview, onStartSpeed, onOpenRanges, onStartMix, onSetLength, onStartPlay } =
+    props;
+  const [mixerOpen, setMixerOpen] = useState(false);
   const reviewCount = progress.reviewQueue.length;
   const focus = recommendSkill(progress, SKILLS);
   const focusInfo = DRILL_INFO[focus];
@@ -141,6 +269,18 @@ export function PracticeScreen(props: Props) {
           </span>
         )}
       </header>
+
+      <button className="play-card" onClick={onStartPlay}>
+        <span className="play-card-art" aria-hidden="true">
+          <Spade size={26} />
+        </span>
+        <span className="row-text">
+          <span className="eyebrow">New · Practice table</span>
+          <strong>Play full hands</strong>
+          <span>Against simulated Nits, Stations, Maniacs and Regulars, with a coach reviewing every hand.</span>
+        </span>
+        <ChevronRight className="row-chevron" size={20} aria-hidden="true" />
+      </button>
 
       <section className={`daily-card ${dailyDone ? "done" : ""}`}>
         <span className="daily-date" aria-hidden="true">
@@ -213,10 +353,29 @@ export function PracticeScreen(props: Props) {
           <span className="icon-tile brand">
             <NamedIcon name="grid" size={20} />
           </span>
-          <strong>Opening ranges</strong>
-          <span>Chart for every seat</span>
+          <strong>Strategy charts</strong>
+          <span>Push/fold solver and opening ranges</span>
+        </button>
+        <button className="tool-card" onClick={() => setMixerOpen(true)}>
+          <span className="icon-tile blue">
+            <NamedIcon name="sliders" size={20} />
+          </span>
+          <strong>Build a drill</strong>
+          <span>Mix the skills you choose</span>
         </button>
       </div>
+
+      {mixerOpen && (
+        <MixBuilder
+          initial={progress.customMix}
+          length={progress.drillLength}
+          onClose={() => setMixerOpen(false)}
+          onStart={(skills) => {
+            setMixerOpen(false);
+            onStartMix(skills);
+          }}
+        />
+      )}
 
       <div className="section-bar">
         <h2 className="section-title">Skill drills</h2>

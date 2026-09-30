@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { LESSON_ORDER } from "../course/course";
+import { sectionLessons } from "../course/course";
 import {
+  applyTestOut,
+  CORE_SKILLS,
+  decodeBackup,
+  encodeBackup,
+  isSectionUnlocked,
+  topTrack,
+  migrateProgress,
+  passedTest,
+  sectionProgress,
   buyHeartRefill,
   buyStreakFreeze,
   clearMistake,
@@ -195,5 +205,118 @@ describe("skills", () => {
   it("keeps the best speed round score", () => {
     const p = recordSpeedRound(recordSpeedRound(initialProgress(T0), 12), 7);
     expect(p.speedBest).toBe(12);
+  });
+});
+
+describe("placement and onboarding", () => {
+  it("unlocks a section by completing everything before it", () => {
+    let p = initialProgress(T0);
+    expect(isSectionUnlocked(p, 2)).toBe(false);
+    p = applyTestOut(p, 2);
+    expect(isSectionUnlocked(p, 1)).toBe(true);
+    expect(isSectionUnlocked(p, 2)).toBe(true);
+    expect(nextLessonId(p)).toBe(sectionLessons(2)[0]);
+    expect(sectionProgress(p, 0).done).toBe(sectionProgress(p, 0).total);
+  });
+
+  it("keeps existing lesson records when testing out", () => {
+    let p = completeSession(initialProgress(T0), { lessonId: "basics-1", accuracy: 1 }, T0).progress;
+    p = applyTestOut(p, 1);
+    expect(p.lessons["basics-1"]).toEqual({ completions: 1, bestAccuracy: 1 });
+  });
+
+  it("passes at 10 of 12", () => {
+    expect(passedTest(10 / 12)).toBe(true);
+    expect(passedTest(9 / 12)).toBe(false);
+  });
+
+  it("doesn't count tests as practice drills", () => {
+    const { progress, reward } = completeSession(initialProgress(T0), { accuracy: 11 / 12, test: true }, T0);
+    expect(reward.gems).toBe(20);
+    expect(progress.drillsCompleted).toBe(0);
+    expect(progress.history).toHaveLength(0);
+  });
+
+  it("skips onboarding for players who already have progress", () => {
+    expect(migrateProgress({}).onboarded).toBe(false);
+    expect(migrateProgress({ xp: 40, lessons: { "basics-1": { completions: 1, bestAccuracy: 1 } } }).onboarded).toBe(true);
+    expect(migrateProgress({ onboarded: false, xp: 40 }).onboarded).toBe(false);
+  });
+
+  it("replaces corrupt fields with defaults and keeps the rest", () => {
+    const saved = { xp: 120, gems: null, xpByDay: [], lessons: "oops", dailyDone: 3, streak: NaN, soundOn: false, extra: 1 };
+    const p = migrateProgress(saved as unknown as Partial<ReturnType<typeof initialProgress>>, T0);
+    const fresh = initialProgress(T0);
+    expect(p.xp).toBe(120);
+    expect(p.soundOn).toBe(false);
+    expect(p.gems).toBe(fresh.gems);
+    expect(p.xpByDay).toEqual({});
+    expect(p.lessons).toEqual({});
+    expect(p.dailyDone).toBeNull();
+    expect(p.streak).toBe(0);
+    expect("extra" in p).toBe(false);
+  });
+
+  it("drops malformed entries inside records and lists", () => {
+    const saved = {
+      xpByDay: { "2026-09-01": 40, "2026-09-02": null },
+      lessons: { "basics-1": { completions: 1, bestAccuracy: 1 }, "basics-2": null },
+      skills: { preflop: { attempts: 5, correct: 4 }, outs: "x" },
+      reviewQueue: ["basics-1#0", 7],
+      customMix: ["outs", "juggling"],
+      history: [{ day: "2026-09-01", title: "Outs", accuracy: 0.8 }, null, 5],
+    };
+    const p = migrateProgress(saved as unknown as Partial<ReturnType<typeof initialProgress>>, T0);
+    expect(p.xpByDay).toEqual({ "2026-09-01": 40 });
+    expect(Object.keys(p.lessons)).toEqual(["basics-1"]);
+    expect(Object.keys(p.skills)).toEqual(["preflop"]);
+    expect(p.reviewQueue).toEqual(["basics-1#0"]);
+    expect(p.customMix).toEqual(["outs"]);
+    expect(p.history).toHaveLength(1);
+  });
+});
+
+describe("test mode sessions", () => {
+  it("asks each question once and scores first answers", () => {
+    let s = startSession(3);
+    s = answer(s, false, false);
+    s = answer(s, true, false);
+    s = answer(s, false, false);
+    expect(isFinished(s)).toBe(true);
+    expect(accuracy(s)).toBeCloseTo(1 / 3);
+    expect(sessionProgress(s)).toBe(1);
+  });
+});
+
+describe("backups", () => {
+  it("round-trips progress, including non-ASCII text", () => {
+    let p = completeSession(initialProgress(T0), { lessonId: "basics-1", accuracy: 1 }, T0).progress;
+    p = recordMistake(p, 'drill:{"prompt":"A♠ K♥ × 2 ≈ 50%"}');
+    const back = decodeBackup(encodeBackup(p));
+    expect(back).not.toBeNull();
+    expect(back!.xp).toBe(p.xp);
+    expect(back!.lessons).toEqual(p.lessons);
+    expect(back!.reviewQueue).toEqual(p.reviewQueue);
+  });
+
+  it("rejects codes that aren't backups", () => {
+    expect(decodeBackup("hello")).toBeNull();
+    expect(decodeBackup("PL1.not-base64!!")).toBeNull();
+    expect(decodeBackup("PL1." + btoa(JSON.stringify({ foo: 1 })))).toBeNull();
+  });
+});
+
+describe("path to top 10%", () => {
+  it("starts at zero and completes as the player progresses", () => {
+    const start = topTrack(initialProgress(T0));
+    expect(start.every((m) => m.value === 0)).toBe(true);
+    let p = applyTestOut(initialProgress(T0), 2);
+    for (const skill of CORE_SKILLS) for (let i = 0; i < 25; i++) p = recordSkill(p, skill, true);
+    const track = Object.fromEntries(topTrack(p).map((m) => [m.id, m]));
+    expect(track["section-0"].value).toBe(track["section-0"].target);
+    expect(track["section-1"].value).toBe(track["section-1"].target);
+    expect(track["section-2"].value).toBe(0);
+    expect(track["core-silver"].value).toBe(CORE_SKILLS.length);
+    expect(track["gold-3"].value).toBe(0);
   });
 });

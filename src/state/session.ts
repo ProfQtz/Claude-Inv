@@ -20,13 +20,17 @@ export function currentExercise(s: Session): number | undefined {
   return s.queue[0];
 }
 
-export function answer(s: Session, correct: boolean): Session {
+/**
+ * Record an answer to the current exercise. In lessons a miss goes to the back of the
+ * queue (`requeue`); in tests each exercise is asked once.
+ */
+export function answer(s: Session, correct: boolean, requeue = true): Session {
   const [head, ...rest] = s.queue;
   if (head === undefined) return s;
   if (correct) return { ...s, queue: rest, solved: s.solved + 1 };
   return {
     ...s,
-    queue: [...rest, head],
+    queue: requeue ? [...rest, head] : rest,
     missed: s.missed.includes(head) ? s.missed : [...s.missed, head],
     mistakes: s.mistakes + 1,
   };
@@ -36,8 +40,9 @@ export function isFinished(s: Session): boolean {
   return s.queue.length === 0;
 }
 
+/** Share of exercises finished: solved ones in lessons, answered ones in tests. */
 export function sessionProgress(s: Session): number {
-  return s.total === 0 ? 1 : s.solved / s.total;
+  return s.total === 0 ? 1 : (s.total - s.queue.length) / s.total;
 }
 
 /** Share of exercises answered right the first time. */

@@ -7,7 +7,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:equity": "rolldown scripts/build-preflop-equity.ts -p node -f esm -o node_modules/.cache/build-preflop-equity.mjs && node node_modules/.cache/build-preflop-equity.mjs",
+    "build:flops": "rolldown scripts/build-flop-equity.ts -p node -f esm -o node_modules/.cache/build-flop-equity.mjs && node node_modules/.cache/build-flop-equity.mjs"
   },
   "repository": {
     "type": "git",

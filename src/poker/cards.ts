@@ -68,3 +68,10 @@ export function shuffle<T>(items: readonly T[], random: () => number = Math.rand
   }
   return out;
 }
+
+/** Card codes as readable text: "Td 9h" → "10♦ 9♥". */
+export function prettyCards(codes: string): string {
+  return parseCards(codes)
+    .map((c) => (c.rank === "T" ? "10" : c.rank) + SUIT_SYMBOL[c.suit])
+    .join(" ");
+}

@@ -7,7 +7,21 @@ export interface TableInfo {
 }
 
 /** Practice skills tracked for generated drill exercises. */
-export type Skill = "showdown" | "handName" | "potOdds" | "outs" | "nuts" | "preflop" | "equity";
+export type Skill =
+  | "showdown"
+  | "handName"
+  | "potOdds"
+  | "outs"
+  | "nuts"
+  | "preflop"
+  | "equity"
+  | "callFold"
+  | "combos"
+  | "pushFold"
+  | "betMath"
+  | "vsOpen"
+  | "bluffCatch"
+  | "rangeEdge";
 
 /** Pick one answer from a list. Used for trivia, hand reading, and fold/call/raise decisions. */
 export interface ChoiceExercise {
@@ -19,6 +33,8 @@ export interface ChoiceExercise {
   villain?: CardList;
   info?: TableInfo[];
   options: string[];
+  /** Options are card lists such as "As Kd 7c", shown as cards. */
+  cardOptions?: boolean;
   answer: number;
   explanation: string;
   skill?: Skill;

@@ -196,6 +196,11 @@ function encode(category: HandCategory, kickers: number[]): number {
   return score;
 }
 
+/** The hand category packed into a score7 value. */
+export function scoreCategory(score: number): HandCategory {
+  return Math.floor(score / 16 ** 5);
+}
+
 /**
  * Fast numeric strength of the best five cards among 5–7 cards. Higher is better and equal
  * means a tie, matching compareHands on evaluate(). Used by equity enumeration.

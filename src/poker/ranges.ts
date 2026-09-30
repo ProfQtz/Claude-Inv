@@ -87,3 +87,86 @@ export const OPENING_RANGES: Record<Position, string> = {
 export const OPENING_SETS: Record<Position, Set<string>> = Object.fromEntries(
   Object.entries(OPENING_RANGES).map(([pos, text]) => [pos, parseRange(text)]),
 ) as Record<Position, Set<string>>;
+
+export type FacingAction = "3-bet" | "Call" | "Fold";
+
+export interface FacingSpot {
+  id: string;
+  /** Short label for tabs, e.g. "BTN vs UTG". */
+  short: string;
+  title: string;
+  /** Hero's seat, as shown on the table. */
+  seat: string;
+  /** What happened before hero acts. */
+  action: string;
+  threeBet: string;
+  call: string;
+  note: string;
+}
+
+/**
+ * Simplified 6-max responses to a 2.5 BB open at 100 BB: pure 3-bet / call / fold
+ * baselines that are easy to learn. They are not solver output.
+ */
+export const FACING_SPOTS: FacingSpot[] = [
+  {
+    id: "btn-vs-utg",
+    short: "BTN vs UTG",
+    title: "Button facing an under-the-gun open",
+    seat: "Button",
+    action: "UTG raised to 2.5 BB",
+    threeBet: "QQ+, AKs, AKo, A5s-A4s",
+    call: "JJ-66, AQs-ATs, KQs-KJs, QJs, JTs, T9s, 98s, AQo",
+    note: "UTG's range is strong, so continue tightly. Hands like KJo and ATo are dominated and fold.",
+  },
+  {
+    id: "btn-vs-co",
+    short: "BTN vs CO",
+    title: "Button facing a cutoff open",
+    seat: "Button",
+    action: "Cutoff raised to 2.5 BB",
+    threeBet: "TT+, AJs+, KQs, AQo+, A5s-A3s",
+    call: "99-22, ATs-A6s, KJs-KTs, QJs-QTs, JTs-J9s, T9s, 98s, 87s, 76s, 65s, AJo, KQo",
+    note: "A cutoff open is wider, so you can 3-bet more and call a lot of suited hands in position.",
+  },
+  {
+    id: "bb-vs-btn",
+    short: "BB vs BTN",
+    title: "Big blind facing a button open",
+    seat: "Big Blind",
+    action: "Button raised to 2.5 BB",
+    threeBet: "TT+, AJs+, KQs, AQo+, A5s-A4s",
+    call:
+      "99-22, ATs-A6s, A3s-A2s, KJs-K2s, Q4s+, J6s+, T6s+, 95s+, 85s+, 74s+, 63s+, 53s+, 43s, AJo-A2o, K8o+, Q9o+, J9o+, T8o+, 98o, 87o, 76o",
+    note: "You close the action and need only about 27% equity, so defend widely. Suited hands and connected cards call; the worst offsuit hands fold.",
+  },
+  {
+    id: "sb-vs-btn",
+    short: "SB vs BTN",
+    title: "Small blind facing a button open",
+    seat: "Small Blind",
+    action: "Button raised to 2.5 BB",
+    threeBet: "88+, ATs+, KTs+, QTs+, JTs, T9s, 98s, A5s-A2s, AJo+, KQo",
+    call: "",
+    note: "Out of position with the big blind still to act, the small blind 3-bets or folds. Calling invites a squeeze.",
+  },
+];
+
+export interface FacingSets {
+  threeBet: Set<string>;
+  call: Set<string>;
+}
+
+export const FACING_SETS: Record<string, FacingSets> = Object.fromEntries(
+  FACING_SPOTS.map((s) => {
+    const threeBet = parseRange(s.threeBet);
+    // A hand listed in both ranges is a 3-bet.
+    const call = new Set([...parseRange(s.call)].filter((h) => !threeBet.has(h)));
+    return [s.id, { threeBet, call }];
+  }),
+);
+
+export function facingAction(spotId: string, label: string): FacingAction {
+  const sets = FACING_SETS[spotId];
+  return sets.threeBet.has(label) ? "3-bet" : sets.call.has(label) ? "Call" : "Fold";
+}

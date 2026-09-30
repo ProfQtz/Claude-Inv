@@ -1,5 +1,8 @@
-import { COURSE, LESSON_ORDER } from "../course/course";
+import { COURSE, LESSON_ORDER, SECTIONS, sectionLessons } from "../course/course";
+import { SKILLS } from "../course/generator";
 import type { Skill } from "../course/types";
+import type { DecisionKind } from "../poker/coach";
+import type { BotStyle } from "../poker/table";
 
 export const MAX_HEARTS = 5;
 export const HEART_REFILL_MS = 20 * 60 * 1000;
@@ -32,6 +35,61 @@ export interface LessonRecord {
   bestAccuracy: number;
 }
 
+export interface VerdictCounts {
+  good: number;
+  close: number;
+  mistakes: number;
+}
+
+/** Lifetime results at the practice table. Net is in chips (10 per big blind). */
+export interface PlayStats {
+  hands: number;
+  net: number;
+  good: number;
+  checked: number;
+  /** 6-max hands, and how many of them you voluntarily played and raised preflop. */
+  hands6: number;
+  vpip6: number;
+  pfr6: number;
+  /** Coach verdicts by kind of decision and, heads-up, by opponent style. */
+  byKind: Partial<Record<DecisionKind, VerdictCounts>>;
+  byStyle: Partial<Record<BotStyle, VerdictCounts>>;
+}
+
+export const emptyPlayStats = (): PlayStats => ({
+  hands: 0,
+  net: 0,
+  good: 0,
+  checked: 0,
+  hands6: 0,
+  vpip6: 0,
+  pfr6: 0,
+  byKind: {},
+  byStyle: {},
+});
+
+/** Add verdict counts key by key. */
+export function mergeCounts<K extends string>(
+  a: Partial<Record<K, VerdictCounts>>,
+  b: Partial<Record<K, VerdictCounts>>,
+): Partial<Record<K, VerdictCounts>> {
+  const out: Partial<Record<K, VerdictCounts>> = { ...a };
+  for (const key of Object.keys(b) as K[]) {
+    const x = out[key] ?? { good: 0, close: 0, mistakes: 0 };
+    const y = b[key]!;
+    out[key] = { good: x.good + y.good, close: x.close + y.close, mistakes: x.mistakes + y.mistakes };
+  }
+  return out;
+}
+
+/** What was finished on one day, for the daily study plan. */
+export interface DayLog {
+  day: string;
+  lessons: number;
+  drills: number;
+  reviews: number;
+}
+
 export interface Progress {
   xp: number;
   gems: number;
@@ -58,6 +116,17 @@ export interface Progress {
   dailyDone: string | null;
   /** Most recent practice sessions, newest first. */
   history: PracticeRecord[];
+  /** Skills chosen last time in "Build a drill". */
+  customMix: Skill[];
+  /** Whether the welcome flow has been completed (or skipped). */
+  onboarded: boolean;
+  /** Today's finished sessions; reset on a new day. */
+  dayLog: DayLog;
+  /** Best final exam score, as a fraction. */
+  examBest: number;
+  /** Day the final exam was first passed. */
+  examPassedOn: string | null;
+  play: PlayStats;
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -82,7 +151,115 @@ export function initialProgress(now = Date.now()): Progress {
     drillLength: 10,
     dailyDone: null,
     history: [],
+    customMix: [],
+    onboarded: false,
+    dayLog: { day: "", lessons: 0, drills: 0, reviews: 0 },
+    examBest: 0,
+    examPassedOn: null,
+    play: emptyPlayStats(),
   };
+}
+
+/**
+ * Fill in fields added since the data was saved. Anyone with progress from before
+ * onboarding existed has clearly started already, so they skip the welcome flow.
+ */
+export function migrateProgress(saved: Partial<Progress>, now = Date.now()): Progress {
+  const p = initialProgress(now);
+  const src: Record<string, unknown> = typeof saved === "object" && saved !== null ? saved : {};
+  // Keep only fields whose type matches the default, so a corrupt or hand-edited
+  // save can't put a null where a screen expects a number, list or record.
+  for (const key of Object.keys(p) as (keyof Progress)[]) {
+    if (key in src && sameShape(src[key], p[key])) (p as unknown as Record<string, unknown>)[key] = src[key];
+  }
+  // Then drop malformed entries inside the records and lists.
+  p.xpByDay = keepEntries(p.xpByDay, isNum);
+  p.lessons = keepEntries(p.lessons, (v): v is LessonRecord => isObj(v) && isNum(v.completions) && isNum(v.bestAccuracy));
+  p.skills = keepEntries(p.skills, (v): v is SkillRecord => isObj(v) && isNum(v.attempts) && isNum(v.correct));
+  p.reviewQueue = p.reviewQueue.filter((ref) => typeof ref === "string");
+  p.customMix = p.customMix.filter((skill) => SKILLS.includes(skill));
+  p.history = p.history.filter(
+    (h): h is PracticeRecord => isObj(h) && typeof h.day === "string" && typeof h.title === "string" && isNum(h.accuracy),
+  );
+  p.play = cleanPlay(p.play);
+  const log = p.dayLog as unknown as Record<string, unknown>;
+  if (!(typeof log.day === "string" && isNum(log.lessons) && isNum(log.drills) && isNum(log.reviews))) {
+    p.dayLog = initialProgress(now).dayLog;
+  }
+  if (typeof src.onboarded !== "boolean") p.onboarded = Object.keys(p.lessons).length > 0 || p.xp > 0;
+  return p;
+}
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+const isCounts = (v: unknown): v is VerdictCounts => isObj(v) && isNum(v.good) && isNum(v.close) && isNum(v.mistakes);
+
+/** Play stats with missing numbers set to zero and malformed count entries dropped. */
+function cleanPlay(saved: unknown): PlayStats {
+  const out = emptyPlayStats();
+  if (!isObj(saved)) return out;
+  for (const key of ["hands", "net", "good", "checked", "hands6", "vpip6", "pfr6"] as const) {
+    if (isNum(saved[key])) out[key] = saved[key] as number;
+  }
+  if (isObj(saved.byKind)) out.byKind = keepEntries(saved.byKind, isCounts);
+  if (isObj(saved.byStyle)) out.byStyle = keepEntries(saved.byStyle, isCounts);
+  return out;
+}
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function keepEntries<T>(record: Record<string, unknown>, ok: (v: unknown) => v is T): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([, v]) => ok(v))) as Record<string, T>;
+}
+
+function sameShape(value: unknown, fallback: unknown): boolean {
+  if (fallback === null) return value === null || typeof value === "string";
+  if (Array.isArray(fallback)) return Array.isArray(value);
+  if (typeof fallback === "number") return isNum(value);
+  if (typeof fallback === "object") return isObj(value);
+  return typeof value === typeof fallback;
+}
+
+export const SECTION_TEST_LENGTH = 12;
+
+/** The final exam: 20 questions across the advanced skills, 17 to pass. */
+export const EXAM_LENGTH = 20;
+export const EXAM_PASS = 0.85;
+export const EXAM_FIRST_PASS_GEMS = 50;
+
+export function passedExam(accuracy: number): boolean {
+  return accuracy >= EXAM_PASS - 1e-9;
+}
+
+/** The final exam opens once the Advanced section is done (the last section is unlocked). */
+export function isExamUnlocked(p: Progress): boolean {
+  return isSectionUnlocked(p, SECTIONS.length - 1);
+}
+/** Pass mark for a test-out: 10 of 12. */
+export const SECTION_TEST_PASS = 0.8;
+
+export function passedTest(accuracy: number): boolean {
+  return accuracy >= SECTION_TEST_PASS - 1e-9;
+}
+
+/** Passing a section test marks every lesson before that section as complete. */
+export function applyTestOut(p: Progress, sectionIndex: number): Progress {
+  const lessons = { ...p.lessons };
+  for (let s = 0; s < sectionIndex; s++) {
+    for (const id of sectionLessons(s)) {
+      if (!lessons[id]?.completions) lessons[id] = { completions: 1, bestAccuracy: 0 };
+    }
+  }
+  return { ...p, lessons };
+}
+
+/** A section is open once its first lesson is unlocked. */
+export function isSectionUnlocked(p: Progress, sectionIndex: number): boolean {
+  return isLessonUnlocked(p, sectionLessons(sectionIndex)[0]);
+}
+
+export function sectionProgress(p: Progress, sectionIndex: number): { done: number; total: number } {
+  const ids = sectionLessons(sectionIndex);
+  return { done: ids.filter((id) => isLessonComplete(p, id)).length, total: ids.length };
 }
 
 /** Local calendar day as YYYY-MM-DD. */
@@ -186,6 +363,14 @@ export interface SessionResult {
   /** Shown in practice history. */
   title?: string;
   daily?: boolean;
+  /** A placement or test-out test. */
+  test?: boolean;
+  /** A mistakes review session. */
+  review?: boolean;
+  /** The final exam. */
+  exam?: boolean;
+  /** A session at the practice table. */
+  play?: PlayStats;
 }
 
 export interface Reward {
@@ -198,6 +383,17 @@ export interface Reward {
 
 export function rewardFor(result: SessionResult): Reward {
   const perfect = result.accuracy >= 1;
+  if (result.test) {
+    return { xp: 15, gems: passedTest(result.accuracy) ? 20 : 0, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
+  }
+  if (result.play) {
+    const hands = result.play.hands;
+    return { xp: Math.min(30, 2 * hands), gems: hands >= 10 ? 2 : 0, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
+  }
+  if (result.exam) {
+    // The first pass also pays EXAM_FIRST_PASS_GEMS; completeSession adds it.
+    return { xp: 30, gems: 0, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
+  }
   if (result.daily) {
     return { xp: 20 + (perfect ? 5 : 0), gems: 20, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
   }
@@ -235,6 +431,18 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     };
   }
 
+  const firstPass = result.exam && passedExam(result.accuracy) && !p.examPassedOn;
+  if (firstPass) reward.gems += EXAM_FIRST_PASS_GEMS;
+
+  const log = p.dayLog.day === today ? p.dayLog : { day: today, lessons: 0, drills: 0, reviews: 0 };
+  const practice = !result.lessonId && !result.test && !result.exam && !result.review && !result.daily;
+  const dayLog = {
+    day: today,
+    lessons: log.lessons + (result.lessonId ? 1 : 0),
+    drills: log.drills + (practice ? 1 : 0),
+    reviews: log.reviews + (result.review ? 1 : 0),
+  };
+
   const refilled = refillHearts(p, now);
   const hearts = Math.min(MAX_HEARTS, refilled.hearts + reward.heartsRestored);
 
@@ -251,11 +459,27 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     xpByDay: { ...p.xpByDay, [today]: (p.xpByDay[today] ?? 0) + reward.xp },
     lessons,
     perfectLessons: p.perfectLessons + (result.lessonId && result.accuracy >= 1 ? 1 : 0),
-    drillsCompleted: p.drillsCompleted + (result.lessonId ? 0 : 1),
+    drillsCompleted: p.drillsCompleted + (result.lessonId || result.test || result.exam ? 0 : 1),
     dailyDone: result.daily ? today : p.dailyDone,
-    history: result.lessonId
+    history: result.lessonId || result.test
       ? p.history
       : [{ day: today, title: result.title ?? "Practice", accuracy: result.accuracy }, ...p.history].slice(0, MAX_HISTORY),
+    dayLog,
+    examBest: result.exam ? Math.max(p.examBest, result.accuracy) : p.examBest,
+    examPassedOn: firstPass ? today : p.examPassedOn,
+    play: result.play
+      ? {
+          hands: p.play.hands + result.play.hands,
+          net: p.play.net + result.play.net,
+          good: p.play.good + result.play.good,
+          checked: p.play.checked + result.play.checked,
+          hands6: p.play.hands6 + result.play.hands6,
+          vpip6: p.play.vpip6 + result.play.vpip6,
+          pfr6: p.play.pfr6 + result.play.pfr6,
+          byKind: mergeCounts(p.play.byKind, result.play.byKind),
+          byStyle: mergeCounts(p.play.byStyle, result.play.byStyle),
+        }
+      : p.play,
   };
   return { progress, reward };
 }
@@ -345,6 +569,105 @@ export function achievements(p: Progress): Achievement[] {
       description: "Finish the entire course",
       icon: "fish",
       unlocked: completed === LESSON_ORDER.length,
+    },
+  ];
+}
+
+const BACKUP_PREFIX = "PL1.";
+
+/** A portable backup code: a version prefix plus base64-encoded JSON (UTF-8 safe). */
+export function encodeBackup(p: Progress): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(p));
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return BACKUP_PREFIX + btoa(binary);
+}
+
+/** Parse a backup code, or return null if it isn't a valid PokerLingo backup. */
+export function decodeBackup(code: string): Progress | null {
+  const text = code.trim();
+  if (!text.startsWith(BACKUP_PREFIX)) return null;
+  try {
+    const binary = atob(text.slice(BACKUP_PREFIX.length));
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const data = JSON.parse(new TextDecoder().decode(bytes));
+    if (typeof data !== "object" || data === null) return null;
+    if (typeof data.xp !== "number" || typeof data.lessons !== "object" || data.lessons === null) return null;
+    return migrateProgress({ ...data, onboarded: true });
+  } catch {
+    return null;
+  }
+}
+
+export interface Milestone {
+  id: string;
+  title: string;
+  description: string;
+  value: number;
+  target: number;
+}
+
+/** Skills a strong regular uses every session; the track asks for Silver in all of them. */
+export const CORE_SKILLS: Skill[] = ["preflop", "vsOpen", "potOdds", "betMath", "equity", "combos", "bluffCatch", "rangeEdge"];
+
+const TIER_RANK: Record<Mastery, number> = { Learning: 0, Bronze: 1, Silver: 2, Gold: 3 };
+
+/**
+ * The "Path to top 10%": finish every section, prove the core skills in practice and pass
+ * the final exam. It measures knowledge and drill accuracy, not results at real tables.
+ */
+export function topTrack(p: Progress): Milestone[] {
+  const section = (i: number, title: string): Milestone => {
+    const { done, total } = sectionProgress(p, i);
+    return { id: `section-${i}`, title: `Finish ${title}`, description: `${total} lessons`, value: done, target: total };
+  };
+  const tierCount = (tier: Mastery, skills: readonly Skill[]) =>
+    skills.filter((s) => TIER_RANK[skillMastery(p, s)] >= TIER_RANK[tier]).length;
+  const allSkills = Object.keys(p.skills) as Skill[];
+  return [
+    ...SECTIONS.map((s, i) => section(i, s.title)),
+    {
+      id: "core-silver",
+      title: "Silver in the eight core skills",
+      description:
+        "Open or Fold, Facing a Raise, Pot Odds, Bet Math, Hand vs Hand, Combos, Bluff-Catching and Range Advantage",
+      value: tierCount("Silver", CORE_SKILLS),
+      target: CORE_SKILLS.length,
+    },
+    {
+      id: "gold-3",
+      title: "Gold in any three skills",
+      description: "50 answers at 90% or better",
+      value: Math.min(3, tierCount("Gold", allSkills)),
+      target: 3,
+    },
+    {
+      id: "speed-15",
+      title: "Score 15 in a Speed Round",
+      description: "Fast, accurate reads under time pressure",
+      value: Math.min(15, p.speedBest),
+      target: 15,
+    },
+    {
+      id: "streak-14",
+      title: "Reach a 14-day streak",
+      description: "Steady practice beats cramming",
+      value: Math.min(14, p.longestStreak),
+      target: 14,
+    },
+    {
+      id: "play-150",
+      title: "Make 150 good decisions at the table",
+      description: "Coach-approved calls, folds, river bets and preflop plays in practice hands",
+      value: Math.min(150, p.play.good),
+      target: 150,
+    },
+    {
+      id: "exam",
+      title: "Pass the final exam",
+      description: `${Math.ceil(EXAM_LENGTH * EXAM_PASS)} of ${EXAM_LENGTH} across the advanced skills`,
+      value: p.examPassedOn ? 1 : 0,
+      target: 1,
     },
   ];
 }

@@ -1,4 +1,4 @@
-import { Dumbbell, Flame, Gem, Heart, House, Play, Snowflake, Store, Target, UserRound } from "lucide-react";
+import { Dumbbell, Flame, Gem, Heart, House, LibraryBig, Play, Snowflake, Store, Target, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { findLesson } from "../course/course";
 import {
@@ -11,11 +11,12 @@ import {
   xpToday,
 } from "../state/progress";
 
-export type Tab = "learn" | "practice" | "shop" | "profile";
+export type Tab = "learn" | "practice" | "library" | "shop" | "profile";
 
 export const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "learn", label: "Learn", icon: House },
   { id: "practice", label: "Practice", icon: Dumbbell },
+  { id: "library", label: "Library", icon: LibraryBig },
   { id: "shop", label: "Shop", icon: Store },
   { id: "profile", label: "Profile", icon: UserRound },
 ];
