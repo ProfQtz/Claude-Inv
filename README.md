@@ -7,7 +7,7 @@ keep you coming back.
 
 ## The path from novice to strong regular
 
-The course has three sections. New players start at the beginning; players who
+The course has four sections. New players start at the beginning; players who
 already know the basics can take a 12-question placement test during onboarding,
 or later from the Learn tab, to jump ahead (pass mark 80%).
 
@@ -16,27 +16,38 @@ or later from the Learn tab, to jump ahead (pass mark 80%).
 | 1. Foundations | 4 | 14 | Cards, hand rankings, how a hand plays out, showdowns |
 | 2. Winning Fundamentals | 5 | 14 | Starting hands, outs and pot odds, post-flop basics, strategy, tournament basics |
 | 3. Advanced | 7 | 24 | Facing raises and 3-bets, advanced math (MDF, bluff break-even, EV, implied odds), ranges and hand reading, value and bluff sizing, exploiting player types, ICM and push/fold, the mental game and study habits |
+| 4. Mastery | 5 | 16 | Stack depth and SPR, 3-bet and multiway pots, river play (thin value, bluff-catching, blockers, polarized bets), the most expensive leaks, and full-hand walkthroughs |
 
-The Profile tab tracks a **Path to top 10%**: finish all three sections, reach
-Silver mastery in the six core skills (preflop, facing a raise, pot odds, bet math,
-equity, combos), Gold in any three skills, 15 in a Speed Round and a 14-day streak.
+Every day, **Today's plan** on the Learn tab picks the next lesson, a drill (the
+newest skill you've been taught but not tried, otherwise your weakest), any
+mistakes to review and the Daily Challenge. After the Advanced section, a
+**final exam** asks 20 fresh questions across ten advanced skills (17 to pass)
+and shows your score by skill.
+
+The Profile tab tracks a **Path to top 10%**: finish all four sections, reach
+Silver mastery in the eight core skills (preflop, facing a raise, pot odds, bet
+math, equity, combos, bluff-catching, range advantage), Gold in any three skills,
+15 in a Speed Round, a 14-day streak and a pass in the final exam.
 It measures the knowledge and habits that separate winning players. Results at a
 real table also depend on experience, bankroll discipline and game selection.
 
 ## Features
 
 **Learn**
-- 16 units, 52 lessons, each unit with a guidebook. Lessons unlock in order.
+- 21 units, 68 lessons and 348 exercises, each unit with a guidebook. Lessons
+  unlock in order.
 - Exercise types: multiple choice with cards on a felt table, "who wins?"
   showdowns graded by a hand evaluator, tap-to-order, match-the-pairs, and
   play-a-hand scenarios with a decision on every street.
 - Wrong answers cost a heart and come back at the end of the lesson.
 
 **Practice**
-- Randomly dealt drills for 12 skills: preflop opens, facing a raise
+- Randomly dealt drills for 14 skills: preflop opens, facing a raise
   (3-bet / call / fold), push or fold (graded by the solver), showdowns,
   name-that-hand, finding the nuts, combos and blockers, counting outs,
-  hand-vs-hand equity, pot odds, bet math and call-or-fold on the turn.
+  hand-vs-hand equity, pot odds, bet math, call-or-fold on the turn,
+  **bluff-catching** (count villain's value and bluff combos on the river, with
+  blockers) and **range advantage** (which flop favours the preflop raiser).
 - Per-skill accuracy with Bronze / Silver / Gold mastery and a
   "recommended for you" drill; 5, 10 or 20 questions; build your own mix.
 - Daily Challenge (the same ten hands for everyone each day), a 60-second Speed
@@ -49,7 +60,11 @@ real table also depend on experience, bankroll discipline and game selection.
   3-bet / call / fold charts for common spots facing a raise.
 - Cheat sheets: outs to equity, bet sizes (call needs, MDF, bluff break-even),
   classic preflop all-in matchups and everyday odds, all computed exactly.
-- A searchable glossary of 99 terms, and every unit's guidebook in one place.
+- An **equity calculator**: your hand against a hand or a range, on any board
+  (exact where feasible, simulated otherwise).
+- A **variance and bankroll** tool: the spread of results for a win rate and
+  sample size, risk of ruin, the bankroll for 5% risk, and simulated graphs.
+- A searchable glossary of 107 terms, and every unit's guidebook in one place.
 
 **Progress**
 - XP, daily goal, day streaks with streak freezes, levels, gems, a shop and
@@ -62,8 +77,10 @@ real table also depend on experience, bankroll discipline and game selection.
 
 Hand evaluation, outs, equity, combos, pot odds and bet math are computed
 exactly, and the push/fold charts are a solved equilibrium for heads-up play.
-Opening and facing-a-raise charts are simplified baselines written for learning,
-not solver output.
+Range-advantage answers come from range-vs-range equity sampled 20,000 times per
+flop. Opening and facing-a-raise charts are simplified baselines written for
+learning, not solver output, and the river drill uses a stated, stylized betting
+range (two pair or better, or a missed draw).
 
 ## Development
 
@@ -73,6 +90,7 @@ npm run dev           # start the dev server
 npm test              # unit tests (evaluator, poker math, solver, course content, progress)
 npm run build         # typecheck + production build into dist/
 npm run build:equity  # regenerate the preflop equity table (a few minutes)
+npm run build:flops   # regenerate the flop equity table (about a minute)
 ```
 
 `src/course/course.test.ts` checks every exercise is well formed (valid cards
@@ -86,6 +104,11 @@ all-in equity for every pair of the 169 starting-hand classes (10,000 sampled
 deals each, with card removal between specific combos). It runs fictitious play
 over that table, which converges to the Nash equilibrium of the heads-up
 push/fold game.
+
+The range-advantage drill reads `src/poker/flopEquity.ts`: the preflop raiser's
+equity against the caller on each of the 1,755 distinct flops (flops that differ
+only by suits play the same, since the ranges don't depend on suits), for three
+open-and-call spots. Regenerate it after changing the opening or calling ranges.
 
 ## Deploying
 
@@ -108,11 +131,11 @@ free, confidential help.
 
 ```
 src/
-  poker/       cards, hand evaluator, equity, ranges, push/fold solver, cheat sheets
-  course/      course content, glossary, exercise types, drill generator
-  state/       progress rules (XP, hearts, streaks, mastery, backups), lesson sessions
+  poker/       cards, hand evaluator, equity, ranges, solvers, calculator, variance, cheat sheets
+  course/      course content, glossary, exercise types, drill and exam generator
+  state/       progress rules (XP, hearts, streaks, mastery, backups), study plan, sessions
   components/  playing cards, exercise views, app shell, error screen
-  screens/     Onboarding, Learn, Lesson, Practice, Library, Shop, Profile
+  screens/     Onboarding, Learn, Lesson, Practice, Library and tools, Shop, Profile
 public/        icons and web manifest
-scripts/       equity table generator
+scripts/       equity table generators
 ```
