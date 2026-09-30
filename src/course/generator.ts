@@ -2,7 +2,17 @@ import { Card, cardCode, fullDeck, parseCards, RANK_NAME, RANKS, shuffle, SUIT_S
 import { CATEGORY_NAME, compareHands, describeHand, evaluate, HandCategory, type HandValue, score7 } from "../poker/evaluator";
 import { exactEquity } from "../poker/equity";
 import { recommend, type Seat, solvePushFold } from "../poker/nash";
-import { handLabel, OPENING_RANGES, OPENING_SETS, type Position, POSITIONS, rangePercent } from "../poker/ranges";
+import {
+  FACING_SETS,
+  FACING_SPOTS,
+  facingAction,
+  handLabel,
+  OPENING_RANGES,
+  OPENING_SETS,
+  type Position,
+  POSITIONS,
+  rangePercent,
+} from "../poker/ranges";
 import { formatPercent, hitProbability, potOdds, ruleOf2And4 } from "../poker/math";
 import type { ChoiceExercise, CompareExercise, Exercise, Skill } from "./types";
 
@@ -390,6 +400,166 @@ export function randomPushFold(random: Random = Math.random): ChoiceExercise {
   throw new Error("Could not deal a clear push/fold spot");
 }
 
+const dollars = (v: number) => `${v < 0 ? "−" : "+"}$${Math.abs(v)}`;
+
+/** Distinct percentage options (rounded) around a correct fraction, ascending. */
+function percentOptions(correct: number, distractors: number[], random: Random) {
+  const label = (x: number) => formatPercent(Math.min(Math.max(x, 0.01), 0.99));
+  const values = new Map<string, number>([[label(correct), correct]]);
+  for (const d of shuffle(distractors, random)) {
+    if (values.size >= 4) break;
+    if (!values.has(label(d))) values.set(label(d), d);
+  }
+  for (let step = 0.07; values.size < 4; step += 0.07) {
+    const d = correct + (values.size % 2 ? step : -step);
+    if (d > 0.02 && d < 0.98 && !values.has(label(d))) values.set(label(d), d);
+  }
+  const sorted = [...values.entries()].sort((a, b) => a[1] - b[1]).map(([l]) => l);
+  return { options: sorted, answer: sorted.indexOf(label(correct)) };
+}
+
+const BET_MATH_POTS = [60, 80, 100, 120, 150, 200, 240, 300];
+const BET_MATH_FRACTIONS = [0.25, 1 / 3, 0.5, 2 / 3, 0.75, 1, 1.5, 2];
+
+/** Betting math with exact answers: MDF, bluff break-even, bluff share, EV of a call, implied odds. */
+export function randomBetMath(random: Random = Math.random): ChoiceExercise {
+  const kind = Math.floor(random() * 5);
+  const pot = pick(BET_MATH_POTS, random);
+  const bet = Math.round(pot * pick(BET_MATH_FRACTIONS, random));
+  const potInfo = [
+    { label: "Pot before bet", value: `$${pot}` },
+    { label: kind === 1 || kind === 2 ? "Your bet" : "Villain bets", value: `$${bet}` },
+  ];
+  const mdf = pot / (pot + bet);
+  const alpha = bet / (pot + bet);
+  const bluffShare = bet / (pot + 2 * bet);
+
+  if (kind === 0) {
+    return {
+      type: "choice",
+      prompt: "Villain bets. What's your minimum defense frequency?",
+      info: potInfo,
+      ...percentOptions(mdf, [alpha, bluffShare, 1 - bluffShare], random),
+      explanation: `MDF = pot ÷ (pot + bet) = ${pot} ÷ ${pot + bet} = ${formatPercent(mdf)}. Fold more often than that and any two cards can bluff you profitably.`,
+      skill: "betMath",
+    };
+  }
+  if (kind === 1) {
+    return {
+      type: "choice",
+      prompt: "You bet as a pure bluff. How often must villain fold for it to break even?",
+      info: potInfo,
+      ...percentOptions(alpha, [mdf, bluffShare, bet / pot], random),
+      explanation: `Folds needed = bet ÷ (pot + bet) = ${bet} ÷ ${pot + bet} = ${formatPercent(alpha)}.`,
+      skill: "betMath",
+    };
+  }
+  if (kind === 2) {
+    return {
+      type: "choice",
+      prompt: "River bet. For a balanced range, what share of your bets can be bluffs?",
+      info: potInfo,
+      ...percentOptions(bluffShare, [alpha, mdf, bet / (2 * pot + 2 * bet)], random),
+      explanation: `Bluff share = bet ÷ (pot + 2 × bet) = ${bet} ÷ ${pot + 2 * bet} = ${formatPercent(bluffShare)}. That equals the equity villain needs to call, so calling breaks even.`,
+      skill: "betMath",
+    };
+  }
+
+  // Calls: the pot includes villain's bet; equity in whole percents.
+  const equity = pick([0.15, 0.2, 0.25, 0.3, 0.35, 0.4], random);
+  const potWithBet = pot + bet;
+  const callInfo = [
+    { label: "Pot (incl. bet)", value: `$${potWithBet}` },
+    { label: "To call", value: `$${bet}` },
+    { label: "Your equity", value: formatPercent(equity) },
+  ];
+  if (kind === 3) {
+    const ev = Math.round(equity * potWithBet - (1 - equity) * bet);
+    const wrong = [
+      Math.round(equity * potWithBet - bet), // forgets you only lose the call when you miss
+      Math.round(equity * (potWithBet + bet)), // ignores the cost of calling
+      -ev, // sign error
+      Math.round(equity * pot - (1 - equity) * bet), // leaves villain's bet out of the pot
+    ].filter((v) => v !== ev);
+    const values = [...new Set([ev, ...shuffle(wrong, random)])].slice(0, 4);
+    for (let d = 5; values.length < 4; d += 5) if (!values.includes(ev + d)) values.push(ev + d);
+    const options = shuffle(values, random).map(dollars);
+    return {
+      type: "choice",
+      prompt: "No more betting after this call. What's the EV of calling?",
+      info: callInfo,
+      options,
+      answer: options.indexOf(dollars(ev)),
+      explanation: `EV = equity × pot − (1 − equity) × call = ${equity} × $${potWithBet} − ${(1 - equity).toFixed(2)} × $${bet} = ${dollars(ev)}.${ev < 0 ? " Fold unless you expect to win more later." : ""}`,
+      skill: "betMath",
+    };
+  }
+
+  // Implied odds: extra winnings needed when you hit, so that equity × (pot + X) = (1 − equity) × call.
+  const needed = Math.round(((1 - equity) * bet) / equity - potWithBet);
+  if (needed <= 0) {
+    const ev = Math.round(equity * potWithBet - (1 - equity) * bet);
+    return {
+      type: "choice",
+      prompt: "Do you need implied odds to call here?",
+      info: callInfo,
+      options: ["No, the pot odds are enough", "Yes, you need to win more later"],
+      answer: 0,
+      explanation: `You need ${formatPercent(bet / (potWithBet + bet))} equity and have ${formatPercent(equity)}, so calling is already +EV (${dollars(ev)}) with no future winnings.`,
+      skill: "betMath",
+    };
+  }
+  const { options, answer } = numberOptions(
+    needed,
+    shuffle([Math.round(bet / equity - potWithBet), Math.round(((1 - equity) * bet) / equity), needed * 2, Math.round(needed / 2)], random),
+  );
+  return {
+    type: "choice",
+    prompt: "How much more must you win on later streets when you hit, to break even?",
+    info: callInfo,
+    options: options.map((o) => `$${o}`),
+    answer,
+    explanation: `Break even when ${equity} × ($${potWithBet} + X) = ${(1 - equity).toFixed(2)} × $${bet}, so X ≈ $${needed}. If villain will pay you that much when you hit, the call is fine.`,
+    skill: "betMath",
+  };
+}
+
+/** Facing an open raise: 3-bet, call or fold, graded by the simplified charts. */
+export function randomVsOpen(random: Random = Math.random): ChoiceExercise {
+  const spot = pick(FACING_SPOTS, random);
+  const sets = FACING_SETS[spot.id];
+  // Deal a third of hands from each answer so 3-bets and calls come up often enough.
+  const roll = random();
+  const target = roll < 0.35 ? sets.threeBet : roll < 0.7 && sets.call.size > 0 ? sets.call : null;
+  let hand: Card[];
+  let label: string;
+  do {
+    hand = shuffle(fullDeck(), random).slice(0, 2);
+    label = handLabel(hand[0], hand[1]);
+  } while (target && !target.has(label));
+
+  const action = facingAction(spot.id, label);
+  const detail =
+    action === "3-bet"
+      ? `3-bet range here: ${spot.threeBet}.`
+      : action === "Call"
+        ? `Calling range here: ${spot.call}.`
+        : `It's outside both the 3-bet range (${spot.threeBet})${spot.call ? " and the calling range" : ""}.`;
+  return {
+    type: "choice",
+    prompt: `${spot.action.replace(" to 2.5 BB", "")}. Your move?`,
+    hand: codes(hand),
+    info: [
+      { label: "Position", value: spot.seat },
+      { label: "Action", value: spot.action },
+    ],
+    options: ["Fold", "Call", "3-bet"],
+    answer: ["Fold", "Call", "3-bet"].indexOf(action),
+    explanation: `${label}: ${action.toLowerCase()} in the ${spot.short} chart. ${detail} ${spot.note}`,
+    skill: "vsOpen",
+  };
+}
+
 const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   showdown: randomCompare,
   handName: randomHandName,
@@ -401,6 +571,8 @@ const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   callFold: randomCallFold,
   combos: randomCombos,
   pushFold: randomPushFold,
+  betMath: randomBetMath,
+  vsOpen: randomVsOpen,
 };
 
 export const SKILLS = Object.keys(MAKERS) as Skill[];

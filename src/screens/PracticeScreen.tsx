@@ -71,6 +71,18 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
     icon: "scale",
     color: "#2f8f5b",
   },
+  vsOpen: {
+    title: "Facing a Raise",
+    description: "3-bet, call or fold against an open.",
+    icon: "shield",
+    color: "#b45309",
+  },
+  betMath: {
+    title: "Bet Math",
+    description: "MDF, bluff odds, EV and implied odds.",
+    icon: "sigma",
+    color: "#0369a1",
+  },
   pushFold: {
     title: "Push or Fold",
     description: "Short-stack shoves and calls, graded by a Nash solver.",
@@ -94,6 +106,7 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
 /** Skills in the order they appear on the Practice tab: preflop to river to math. */
 export const SKILL_ORDER: Skill[] = [
   "preflop",
+  "vsOpen",
   "pushFold",
   "showdown",
   "handName",
@@ -102,6 +115,7 @@ export const SKILL_ORDER: Skill[] = [
   "outs",
   "equity",
   "potOdds",
+  "betMath",
   "callFold",
 ];
 

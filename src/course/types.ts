@@ -17,7 +17,9 @@ export type Skill =
   | "equity"
   | "callFold"
   | "combos"
-  | "pushFold";
+  | "pushFold"
+  | "betMath"
+  | "vsOpen";
 
 /** Pick one answer from a list. Used for trivia, hand reading, and fold/call/raise decisions. */
 export interface ChoiceExercise {

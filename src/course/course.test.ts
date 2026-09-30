@@ -17,7 +17,7 @@ import {
   SKILLS,
 } from "./generator";
 import { exactEquity } from "../poker/equity";
-import { handLabel, OPENING_SETS, POSITIONS } from "../poker/ranges";
+import { FACING_SPOTS, facingAction, handLabel, OPENING_SETS, POSITIONS } from "../poker/ranges";
 import { describeHand, HandCategory } from "../poker/evaluator";
 import type { Exercise } from "./types";
 
@@ -109,7 +109,7 @@ describe("drill generator", () => {
   let seed = 42;
   const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
 
-  it.each(["showdown", "handName", "potOdds", "outs", "nuts", "preflop", "callFold", "combos", "mixed"] as const)(
+  it.each(["showdown", "handName", "potOdds", "outs", "nuts", "preflop", "callFold", "combos", "betMath", "vsOpen", "mixed"] as const)(
     "generates valid %s drills",
     (kind) => {
       for (let i = 0; i < 25; i++) generateDrill(kind, 6, random).forEach(checkExercise);
@@ -315,6 +315,57 @@ describe("option ordering", () => {
       if (e.type !== "choice" || !e.options.every((o) => /^\$?\d/.test(o))) continue;
       const values = e.options.map(num);
       expect([...values].sort((a, b) => a - b), e.prompt).toEqual(values);
+    }
+  });
+});
+
+describe("bet math and facing-a-raise drills", () => {
+  it("grades facing-a-raise spots by the charts", () => {
+    for (let i = 0; i < 60; i++) {
+      const e = generateExercise("vsOpen");
+      if (e.type !== "choice") throw new Error("expected choice");
+      const [a, b] = parseCards(e.hand!);
+      const spot = FACING_SPOTS.find((s) => s.action === e.info![1].value && s.seat === e.info![0].value)!;
+      expect(e.options[e.answer]).toBe(facingAction(spot.id, handLabel(a, b)));
+    }
+  });
+
+  it("gives bet math questions a correct answer among distinct options", () => {
+    for (let i = 0; i < 300; i++) {
+      const e = generateExercise("betMath");
+      if (e.type !== "choice") throw new Error("expected choice");
+      expect(new Set(e.options).size).toBe(e.options.length);
+      expect(e.answer).toBeGreaterThanOrEqual(0);
+      const info = Object.fromEntries(e.info!.map((i) => [i.label, Number(i.value.replace(/[$%]/g, ""))]));
+      const right = e.options[e.answer];
+      if (e.prompt.includes("minimum defense")) {
+        const p = info["Pot before bet"];
+        const b = info["Villain bets"];
+        expect(right).toBe(`${Math.round((p / (p + b)) * 100)}%`);
+      } else if (e.prompt.includes("break even") && e.prompt.includes("bluff")) {
+        const p = info["Pot before bet"];
+        const b = info["Your bet"];
+        expect(right).toBe(`${Math.round((b / (p + b)) * 100)}%`);
+      } else if (e.prompt.includes("share of your bets")) {
+        const p = info["Pot before bet"];
+        const b = info["Your bet"];
+        expect(right).toBe(`${Math.round((b / (p + 2 * b)) * 100)}%`);
+      } else if (e.prompt.includes("EV of calling")) {
+        const x = info["Pot (incl. bet)"];
+        const c = info["To call"];
+        const eq = info["Your equity"] / 100;
+        const ev = Math.round(eq * x - (1 - eq) * c);
+        expect(right).toBe(`${ev < 0 ? "−" : "+"}$${Math.abs(ev)}`);
+      } else if (e.prompt.includes("win on later streets")) {
+        const x = info["Pot (incl. bet)"];
+        const c = info["To call"];
+        const eq = info["Your equity"] / 100;
+        // Check the break-even identity rather than the rounded display.
+        const needed = Number(right.slice(1));
+        expect(Math.abs(eq * (x + needed) - (1 - eq) * c)).toBeLessThan(1);
+      } else {
+        expect(e.prompt).toContain("implied odds");
+      }
     }
   });
 });

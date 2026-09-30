@@ -2926,6 +2926,18 @@ p {
   color: var(--on-brand);
 }
 
+/* 3-bets use the chip-red accent so they read apart from calls. */
+.range-cell.threebet,
+.swatch.threebet {
+  background: var(--red);
+  color: #fff;
+}
+
+.chart-note-text {
+  color: var(--ink-2);
+  max-width: 64ch;
+}
+
 .swatch.mixed {
   background: color-mix(in srgb, var(--brand) 50%, var(--surface-3));
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--brand) 70%, transparent);
