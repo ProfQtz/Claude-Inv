@@ -1,4 +1,5 @@
 import { POSTFLOP_UNIT, TOURNAMENT_UNIT } from "./advanced";
+import { ADVANCED_UNITS } from "./expert";
 import type { Exercise, Unit } from "./types";
 
 const RANKING_ORDER = [
@@ -793,8 +794,8 @@ export const COURSE: Unit[] = [
           {
             type: "choice",
             prompt: "How many starting-hand card combinations are there?",
-            options: ["169", "1,326", "52", "2,652"],
-            answer: 1,
+            options: ["52", "169", "1,326", "2,652"],
+            answer: 2,
             explanation: "52 × 51 / 2 = 1,326 combos. They group into 169 strategically distinct hands (like AKs, AKo, AA).",
           },
           {
@@ -989,8 +990,8 @@ export const COURSE: Unit[] = [
             prompt: "You have a gutshot (inside) straight draw. How many outs?",
             hand: "9c 8d",
             board: "6s 5h Kc",
-            options: ["4", "8", "9", "2"],
-            answer: 0,
+            options: ["2", "4", "8", "9"],
+            answer: 1,
             explanation: "Only a 7 fills the gap: 4 outs.",
           },
           {
@@ -1337,7 +1338,46 @@ export const COURSE: Unit[] = [
     ],
   },
   TOURNAMENT_UNIT,
+  ...ADVANCED_UNITS,
 ];
+
+export interface Section {
+  id: string;
+  title: string;
+  description: string;
+  unitIds: string[];
+}
+
+/** The course in three stages; units appear in COURSE in this order. */
+export const SECTIONS: Section[] = [
+  {
+    id: "foundations",
+    title: "Foundations",
+    description: "The rules, hand rankings and how a hand plays out.",
+    unitIds: ["basics", "rankings", "holdem", "showdown"],
+  },
+  {
+    id: "fundamentals",
+    title: "Winning Fundamentals",
+    description: "Starting hands, the math of calling, post-flop basics and tournament play.",
+    unitIds: ["starting", "odds", "postflop", "strategy", "tournaments"],
+  },
+  {
+    id: "advanced",
+    title: "Advanced",
+    description: "What strong regulars know: 3-bets, ranges, sizing, exploits, ICM and the mental game.",
+    unitIds: ["facing", "math", "reading", "postflop2", "exploit", "mtt", "mindset"],
+  },
+];
+
+export function sectionOfUnit(unitId: string): number {
+  return SECTIONS.findIndex((s) => s.unitIds.includes(unitId));
+}
+
+/** Lesson ids of every unit in the given section. */
+export function sectionLessons(sectionIndex: number): string[] {
+  return SECTIONS[sectionIndex].unitIds.flatMap((id) => COURSE.find((u) => u.id === id)!.lessons.map((l) => l.id));
+}
 
 export function findLesson(lessonId: string) {
   for (const unit of COURSE) {

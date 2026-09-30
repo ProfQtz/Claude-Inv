@@ -30,6 +30,13 @@ import {
   Blocks,
   SlidersHorizontal,
   Cpu,
+  Shield,
+  Sigma,
+  Eye,
+  Waypoints,
+  Users,
+  Crown,
+  Lightbulb,
 } from "lucide-react";
 
 /** Icons referenced by name from course data, drills and achievements. */
@@ -64,6 +71,13 @@ export const ICONS: Record<string, LucideIcon> = {
   blocks: Blocks,
   sliders: SlidersHorizontal,
   cpu: Cpu,
+  shield: Shield,
+  sigma: Sigma,
+  eye: Eye,
+  waypoints: Waypoints,
+  users: Users,
+  crown: Crown,
+  lightbulb: Lightbulb,
 };
 
 export function NamedIcon({ name, size = 20, strokeWidth = 2 }: { name: string; size?: number; strokeWidth?: number }) {

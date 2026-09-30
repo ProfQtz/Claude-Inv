@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseCards } from "../poker/cards";
-import { COURSE, drillRef, exerciseByRef, exerciseRef, LESSON_ORDER } from "./course";
+import { COURSE, drillRef, exerciseByRef, exerciseRef, LESSON_ORDER, SECTIONS, sectionLessons } from "./course";
+import { potOdds } from "../poker/math";
+import { solvePushFold } from "../poker/nash";
 import {
   countCombos,
   countOuts,
@@ -239,6 +241,80 @@ describe("skill tags", () => {
       if (e.type !== "choice") throw new Error("expected choice");
       const outs = countOuts(parseCards(e.hand!), parseCards(e.board!));
       expect(Number(e.options[e.answer])).toBe(outs.length);
+    }
+  });
+});
+
+describe("sections", () => {
+  it("cover every unit exactly once, in course order", () => {
+    expect(SECTIONS.flatMap((s) => s.unitIds)).toEqual(COURSE.map((u) => u.id));
+  });
+
+  it("list lessons per section", () => {
+    const all = SECTIONS.flatMap((_, i) => sectionLessons(i));
+    expect(all).toEqual(LESSON_ORDER);
+  });
+});
+
+describe("advanced math claims", () => {
+  const pct = (x: number) => Math.round(x * 100);
+  const lesson = (id: string) => COURSE.flatMap((u) => u.lessons).find((l) => l.id === id)!;
+  const choice = (id: string, i: number) => {
+    const e = lesson(id).exercises[i];
+    if (e.type !== "choice") throw new Error(`${id}#${i} is not a choice`);
+    return e.options[e.answer];
+  };
+
+  it("big blind defense price: call 1.5 into 4", () => expect(`${pct(potOdds(4, 1.5))}%`).toBe(choice("facing-2", 0)));
+  it("price to call a 3-bet: 5 into 11.5", () => expect(`${pct(potOdds(11.5, 5))}%`).toBe(choice("facing-3", 2)));
+  it("EV of a +$300/-$100 bet at 40%", () => expect(`+$${0.4 * 300 - 0.6 * 100}`).toBe(choice("math-1", 1)));
+  it("EV of a 30% call", () => expect(0.3 * 100 - 0.7 * 50).toBeCloseTo(-5));
+  it("EV with $40 implied", () => expect(0.3 * 140 - 0.7 * 50).toBeCloseTo(7));
+  it("implied odds needed on the turn", () => {
+    // Break even when e × (pot + X) = (1 − e) × call.
+    const x = (0.8 * 50) / 0.2 - 100;
+    expect(`$${x}`).toBe(choice("math-2", 1));
+  });
+  it("bluff break-even sizes", () => {
+    expect(`${pct(50 / 150)}%`).toBe(choice("math-3", 0));
+    expect(`${pct(100 / 200)}%`).toBe(choice("math-3", 1));
+    expect(0.6 * 100 - 0.4 * 50).toBe(40);
+  });
+  it("minimum defense frequencies and bluff share", () => {
+    expect(`${pct(100 / 200)}%`).toBe(choice("math-4", 0));
+    expect(`${pct(100 / 150)}%`).toBe(choice("math-4", 1));
+    expect(`${pct(100 / 300)}%`).toBe(choice("math-4", 3));
+  });
+  it("combinations and bluff-catching", () => {
+    expect(String(countCombos("AK", parseCards("As Kd 7c")))).toBe(choice("reading-2", 2));
+    expect(`${pct(12 / 18)}%`).toBe(choice("reading-2", 3));
+  });
+  it("river bluff-catch price", () => expect(pct(potOdds(180, 60))).toBe(25));
+  it("combo draw has 15 outs", () => expect(countOuts(parseCards("9h 8h"), parseCards("Th 7c 2h"))).toHaveLength(15));
+  it("ICM with equal stacks", () => expect(`$${Math.round(1000 / 3)}`).toBe(choice("mtt-1", 2)));
+  it("the solver claim about heads-up 10 BB shoves", () => {
+    expect(solvePushFold(10).pushPercent).toBeGreaterThan(0.55);
+    expect(solvePushFold(10).pushPercent).toBeLessThan(0.63);
+  });
+
+  it("scenario pots add up", () => {
+    // Tight opener: 2.5 + 2.5 + blinds 1.5 = 6.5; +3 +3 = 12.5; +8 +8 = 28.5.
+    expect(2.5 + 2.5 + 1.5).toBe(6.5);
+    expect(6.5 + 3 + 3).toBe(12.5);
+    expect(12.5 + 8 + 8).toBe(28.5);
+    // Value on three streets: 5.5 → +2+2 = 9.5 → +6+6 = 21.5.
+    expect(5.5 + 2 + 2).toBe(9.5);
+    expect(9.5 + 6 + 6).toBe(21.5);
+  });
+});
+
+describe("option ordering", () => {
+  it("lists all-numeric options in ascending order", () => {
+    const num = (o: string) => Number(o.replace(/[$,%]/g, "").split(/[–\s]/)[0]);
+    for (const { e } of allExercises) {
+      if (e.type !== "choice" || !e.options.every((o) => /^\$?\d/.test(o))) continue;
+      const values = e.options.map(num);
+      expect([...values].sort((a, b) => a - b), e.prompt).toEqual(values);
     }
   });
 });
