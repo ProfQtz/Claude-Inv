@@ -1,4 +1,4 @@
-import { COURSE, LESSON_ORDER } from "../course/course";
+import { COURSE, LESSON_ORDER, sectionLessons } from "../course/course";
 import type { Skill } from "../course/types";
 
 export const MAX_HEARTS = 5;
@@ -60,6 +60,8 @@ export interface Progress {
   history: PracticeRecord[];
   /** Skills chosen last time in "Build a drill". */
   customMix: Skill[];
+  /** Whether the welcome flow has been completed (or skipped). */
+  onboarded: boolean;
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -85,7 +87,47 @@ export function initialProgress(now = Date.now()): Progress {
     dailyDone: null,
     history: [],
     customMix: [],
+    onboarded: false,
   };
+}
+
+/**
+ * Fill in fields added since the data was saved. Anyone with progress from before
+ * onboarding existed has clearly started already, so they skip the welcome flow.
+ */
+export function migrateProgress(saved: Partial<Progress>, now = Date.now()): Progress {
+  const p = { ...initialProgress(now), ...saved };
+  if (saved.onboarded === undefined) p.onboarded = Object.keys(p.lessons).length > 0 || p.xp > 0;
+  return p;
+}
+
+export const SECTION_TEST_LENGTH = 12;
+/** Pass mark for a test-out: 10 of 12. */
+export const SECTION_TEST_PASS = 0.8;
+
+export function passedTest(accuracy: number): boolean {
+  return accuracy >= SECTION_TEST_PASS - 1e-9;
+}
+
+/** Passing a section test marks every lesson before that section as complete. */
+export function applyTestOut(p: Progress, sectionIndex: number): Progress {
+  const lessons = { ...p.lessons };
+  for (let s = 0; s < sectionIndex; s++) {
+    for (const id of sectionLessons(s)) {
+      if (!lessons[id]?.completions) lessons[id] = { completions: 1, bestAccuracy: 0 };
+    }
+  }
+  return { ...p, lessons };
+}
+
+/** A section is open once its first lesson is unlocked. */
+export function isSectionUnlocked(p: Progress, sectionIndex: number): boolean {
+  return isLessonUnlocked(p, sectionLessons(sectionIndex)[0]);
+}
+
+export function sectionProgress(p: Progress, sectionIndex: number): { done: number; total: number } {
+  const ids = sectionLessons(sectionIndex);
+  return { done: ids.filter((id) => isLessonComplete(p, id)).length, total: ids.length };
 }
 
 /** Local calendar day as YYYY-MM-DD. */
@@ -189,6 +231,8 @@ export interface SessionResult {
   /** Shown in practice history. */
   title?: string;
   daily?: boolean;
+  /** A placement or test-out test. */
+  test?: boolean;
 }
 
 export interface Reward {
@@ -201,6 +245,9 @@ export interface Reward {
 
 export function rewardFor(result: SessionResult): Reward {
   const perfect = result.accuracy >= 1;
+  if (result.test) {
+    return { xp: 15, gems: passedTest(result.accuracy) ? 20 : 0, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
+  }
   if (result.daily) {
     return { xp: 20 + (perfect ? 5 : 0), gems: 20, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
   }
@@ -254,9 +301,9 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     xpByDay: { ...p.xpByDay, [today]: (p.xpByDay[today] ?? 0) + reward.xp },
     lessons,
     perfectLessons: p.perfectLessons + (result.lessonId && result.accuracy >= 1 ? 1 : 0),
-    drillsCompleted: p.drillsCompleted + (result.lessonId ? 0 : 1),
+    drillsCompleted: p.drillsCompleted + (result.lessonId || result.test ? 0 : 1),
     dailyDone: result.daily ? today : p.dailyDone,
-    history: result.lessonId
+    history: result.lessonId || result.test
       ? p.history
       : [{ day: today, title: result.title ?? "Practice", accuracy: result.accuracy }, ...p.history].slice(0, MAX_HISTORY),
   };

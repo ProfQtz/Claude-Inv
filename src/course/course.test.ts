@@ -14,6 +14,7 @@ import {
   generateDrill,
   generateExercise,
   resolveCompare,
+  sectionTest,
   SKILLS,
 } from "./generator";
 import { exactEquity } from "../poker/equity";
@@ -367,5 +368,17 @@ describe("bet math and facing-a-raise drills", () => {
         expect(e.prompt).toContain("implied odds");
       }
     }
+  });
+});
+
+describe("section tests", () => {
+  it("draw quick-to-grade questions from every unit before the section", () => {
+    const test = sectionTest(2, 12);
+    expect(test).toHaveLength(12);
+    const units = new Set(test.map((e) => COURSE.find((u) => u.lessons.some((l) => l.exercises.includes(e)))!.id));
+    const before = [...SECTIONS[0].unitIds, ...SECTIONS[1].unitIds];
+    for (const id of units) expect(before).toContain(id);
+    expect(units.size).toBeGreaterThanOrEqual(8);
+    for (const e of test) expect(["choice", "compare", "order"]).toContain(e.type);
   });
 });

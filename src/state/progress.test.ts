@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { LESSON_ORDER } from "../course/course";
+import { sectionLessons } from "../course/course";
 import {
+  applyTestOut,
+  isSectionUnlocked,
+  migrateProgress,
+  passedTest,
+  sectionProgress,
   buyHeartRefill,
   buyStreakFreeze,
   clearMistake,
@@ -195,5 +201,53 @@ describe("skills", () => {
   it("keeps the best speed round score", () => {
     const p = recordSpeedRound(recordSpeedRound(initialProgress(T0), 12), 7);
     expect(p.speedBest).toBe(12);
+  });
+});
+
+describe("placement and onboarding", () => {
+  it("unlocks a section by completing everything before it", () => {
+    let p = initialProgress(T0);
+    expect(isSectionUnlocked(p, 2)).toBe(false);
+    p = applyTestOut(p, 2);
+    expect(isSectionUnlocked(p, 1)).toBe(true);
+    expect(isSectionUnlocked(p, 2)).toBe(true);
+    expect(nextLessonId(p)).toBe(sectionLessons(2)[0]);
+    expect(sectionProgress(p, 0).done).toBe(sectionProgress(p, 0).total);
+  });
+
+  it("keeps existing lesson records when testing out", () => {
+    let p = completeSession(initialProgress(T0), { lessonId: "basics-1", accuracy: 1 }, T0).progress;
+    p = applyTestOut(p, 1);
+    expect(p.lessons["basics-1"]).toEqual({ completions: 1, bestAccuracy: 1 });
+  });
+
+  it("passes at 10 of 12", () => {
+    expect(passedTest(10 / 12)).toBe(true);
+    expect(passedTest(9 / 12)).toBe(false);
+  });
+
+  it("doesn't count tests as practice drills", () => {
+    const { progress, reward } = completeSession(initialProgress(T0), { accuracy: 11 / 12, test: true }, T0);
+    expect(reward.gems).toBe(20);
+    expect(progress.drillsCompleted).toBe(0);
+    expect(progress.history).toHaveLength(0);
+  });
+
+  it("skips onboarding for players who already have progress", () => {
+    expect(migrateProgress({}).onboarded).toBe(false);
+    expect(migrateProgress({ xp: 40, lessons: { "basics-1": { completions: 1, bestAccuracy: 1 } } }).onboarded).toBe(true);
+    expect(migrateProgress({ onboarded: false, xp: 40 }).onboarded).toBe(false);
+  });
+});
+
+describe("test mode sessions", () => {
+  it("asks each question once and scores first answers", () => {
+    let s = startSession(3);
+    s = answer(s, false, false);
+    s = answer(s, true, false);
+    s = answer(s, false, false);
+    expect(isFinished(s)).toBe(true);
+    expect(accuracy(s)).toBeCloseTo(1 / 3);
+    expect(sessionProgress(s)).toBe(1);
   });
 });

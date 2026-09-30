@@ -1,22 +1,70 @@
-import { BookOpen, Check, Crown, Lock, Play, Star } from "lucide-react";
+import { BookOpen, Check, Crown, Lock, Play, Star, Zap } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { COURSE } from "../course/course";
+import { COURSE, SECTIONS } from "../course/course";
 import type { Unit } from "../course/types";
 import { DailyGoalCard } from "../components/Shell";
 import { NamedIcon } from "../components/Icons";
-import { isLessonComplete, isLessonUnlocked, nextLessonId, Progress, unitProgress } from "../state/progress";
+import {
+  isLessonComplete,
+  isLessonUnlocked,
+  isSectionUnlocked,
+  nextLessonId,
+  Progress,
+  SECTION_TEST_LENGTH,
+  sectionProgress,
+  unitProgress,
+} from "../state/progress";
 
 interface Props {
   progress: Progress;
   now: number;
   onStartLesson: (lessonId: string) => void;
+  /** Start a test that unlocks the given section. */
+  onTestOut: (sectionIndex: number) => void;
 }
 
 /** Horizontal offsets that make the lesson path snake left and right. */
 const OFFSETS = [0, 40, 64, 40, 0, -40, -64, -40];
 const SUIT_WATERMARK = ["♠", "♥", "♦", "♣"];
 
-export function LearnScreen({ progress, now, onStartLesson }: Props) {
+function SectionHeader({
+  progress,
+  index,
+  onTestOut,
+}: {
+  progress: Progress;
+  index: number;
+  onTestOut: (sectionIndex: number) => void;
+}) {
+  const section = SECTIONS[index];
+  const { done, total } = sectionProgress(progress, index);
+  const unlocked = isSectionUnlocked(progress, index);
+  return (
+    <header className={`section-head ${unlocked ? "" : "locked"}`}>
+      <div className="section-title-row">
+        <div>
+          <span className="eyebrow">Section {index + 1}</span>
+          <h2>{section.title}</h2>
+        </div>
+        <span className="section-count num">
+          {done}/{total}
+        </span>
+      </div>
+      <p>{section.description}</p>
+      <div className="meter brand" aria-hidden="true">
+        <div style={{ width: `${(done / total) * 100}%` }} />
+      </div>
+      {!unlocked && (
+        <button className="btn btn-secondary test-out" onClick={() => onTestOut(index)}>
+          <Zap size={16} aria-hidden="true" />
+          Jump here: take a {SECTION_TEST_LENGTH}-question test
+        </button>
+      )}
+    </header>
+  );
+}
+
+export function LearnScreen({ progress, now, onStartLesson, onTestOut }: Props) {
   const current = nextLessonId(progress);
   const [selected, setSelected] = useState<string | null>(null);
   const [guidebook, setGuidebook] = useState<Unit | null>(null);
@@ -32,92 +80,105 @@ export function LearnScreen({ progress, now, onStartLesson }: Props) {
         <DailyGoalCard progress={progress} now={now} />
       </div>
 
-      {COURSE.map((unit, unitIndex) => {
-        const { done, total } = unitProgress(progress, unit.id);
-        const unitStyle = { "--unit-color": unit.color } as CSSProperties;
-        return (
-          <section key={unit.id} className="unit" style={unitStyle}>
-            <header className="unit-banner">
-              <span className="unit-watermark" aria-hidden="true">
-                {SUIT_WATERMARK[unitIndex % 4]}
-              </span>
-              <div className="unit-heading">
-                <span className="eyebrow">
-                  Unit {unitIndex + 1} · {done} of {total} lessons
-                </span>
-                <h2>{unit.title}</h2>
-                <p>{unit.description}</p>
-                <div className="unit-progress" aria-hidden="true">
-                  <div style={{ width: `${(done / total) * 100}%` }} />
-                </div>
-              </div>
-              <button className="guidebook-btn" onClick={() => setGuidebook(unit)}>
-                <BookOpen size={18} aria-hidden="true" />
-                <span>Guidebook</span>
-              </button>
-            </header>
+      {SECTIONS.map((section, sectionIndex) => (
+        <div key={section.id} className="section-block">
+          <SectionHeader progress={progress} index={sectionIndex} onTestOut={onTestOut} />
 
-            <div className="path">
-              {unit.lessons.map((lesson, i) => {
-                const complete = isLessonComplete(progress, lesson.id);
-                const unlocked = isLessonUnlocked(progress, lesson.id);
-                const isCurrent = lesson.id === current;
-                const perfect = (progress.lessons[lesson.id]?.bestAccuracy ?? 0) >= 1;
-                const state = complete ? (perfect ? "perfect" : "complete") : unlocked ? "available" : "locked";
-                const offset = OFFSETS[(i + unitIndex * 2) % OFFSETS.length];
-                const open = selected === lesson.id;
+          {section.unitIds.map((unitId) => {
+            const unitIndex = COURSE.findIndex((u) => u.id === unitId);
+            const unit = COURSE[unitIndex];
+            const { done, total } = unitProgress(progress, unit.id);
+            const unitStyle = { "--unit-color": unit.color } as CSSProperties;
+            return (
+              <section key={unit.id} className="unit" style={unitStyle}>
+                <header className="unit-banner">
+                  <span className="unit-watermark" aria-hidden="true">
+                    {SUIT_WATERMARK[unitIndex % 4]}
+                  </span>
+                  <div className="unit-heading">
+                    <span className="eyebrow">
+                      Unit {unitIndex + 1} · {done} of {total} lessons
+                    </span>
+                    <h2>{unit.title}</h2>
+                    <p>{unit.description}</p>
+                    <div className="unit-progress" aria-hidden="true">
+                      <div style={{ width: `${(done / total) * 100}%` }} />
+                    </div>
+                  </div>
+                  <button className="guidebook-btn" onClick={() => setGuidebook(unit)}>
+                    <BookOpen size={18} aria-hidden="true" />
+                    <span>Guidebook</span>
+                  </button>
+                </header>
 
-                return (
-                  <div
-                    key={lesson.id}
-                    className={`path-node-wrap ${open ? "open" : ""}`}
-                    style={{ transform: `translateX(${offset}px)` }}
-                    ref={isCurrent ? currentRef : undefined}
-                  >
-                    {isCurrent && !open && <span className="start-tag">Start</span>}
-                    <button
-                      className={`path-node ${state} ${isCurrent ? "current" : ""}`}
-                      aria-label={`${lesson.title} (${state})`}
-                      aria-expanded={open}
-                      onClick={() => setSelected(open ? null : lesson.id)}
-                    >
-                      {state === "locked" ? (
-                        <Lock size={22} aria-hidden="true" />
-                      ) : state === "perfect" ? (
-                        <Crown size={26} aria-hidden="true" />
-                      ) : complete ? (
-                        <Check size={28} strokeWidth={3} aria-hidden="true" />
-                      ) : isCurrent ? (
-                        <Star size={26} fill="currentColor" aria-hidden="true" />
-                      ) : (
-                        <NamedIcon name={unit.icon} size={24} />
-                      )}
-                    </button>
-                    {open && (
-                      <div className={`node-popover ${unlocked ? "" : "locked"}`}>
-                        <span className="eyebrow">
-                          Lesson {i + 1} of {unit.lessons.length}
-                        </span>
-                        <strong>{lesson.title}</strong>
-                        <span className="popover-meta">{lesson.exercises.length} exercises</span>
-                        {unlocked ? (
-                          <button className="btn btn-light" onClick={() => onStartLesson(lesson.id)}>
-                            <Play size={16} fill="currentColor" aria-hidden="true" />
-                            {complete ? "Practice again" : "Start lesson"}
-                            <span className="btn-xp">+{complete ? 10 : 15} XP</span>
-                          </button>
-                        ) : (
-                          <span className="locked-note">Finish the lessons above to unlock this one.</span>
+                <div className="path">
+                  {unit.lessons.map((lesson, i) => {
+                    const complete = isLessonComplete(progress, lesson.id);
+                    const unlocked = isLessonUnlocked(progress, lesson.id);
+                    const isCurrent = lesson.id === current;
+                    const perfect = (progress.lessons[lesson.id]?.bestAccuracy ?? 0) >= 1;
+                    const state = complete ? (perfect ? "perfect" : "complete") : unlocked ? "available" : "locked";
+                    const offset = OFFSETS[(i + unitIndex * 2) % OFFSETS.length];
+                    const open = selected === lesson.id;
+
+                    return (
+                      <div
+                        key={lesson.id}
+                        className={`path-node-wrap ${open ? "open" : ""}`}
+                        style={{ transform: `translateX(${offset}px)` }}
+                        ref={isCurrent ? currentRef : undefined}
+                      >
+                        {isCurrent && !open && <span className="start-tag">Start</span>}
+                        <button
+                          className={`path-node ${state} ${isCurrent ? "current" : ""}`}
+                          aria-label={`${lesson.title} (${state})`}
+                          aria-expanded={open}
+                          onClick={() => setSelected(open ? null : lesson.id)}
+                        >
+                          {state === "locked" ? (
+                            <Lock size={22} aria-hidden="true" />
+                          ) : state === "perfect" ? (
+                            <Crown size={26} aria-hidden="true" />
+                          ) : complete ? (
+                            <Check size={28} strokeWidth={3} aria-hidden="true" />
+                          ) : isCurrent ? (
+                            <Star size={26} fill="currentColor" aria-hidden="true" />
+                          ) : (
+                            <NamedIcon name={unit.icon} size={24} />
+                          )}
+                        </button>
+                        {open && (
+                          <div className={`node-popover ${unlocked ? "" : "locked"}`}>
+                            <span className="eyebrow">
+                              Lesson {i + 1} of {unit.lessons.length}
+                            </span>
+                            <strong>{lesson.title}</strong>
+                            <span className="popover-meta">{lesson.exercises.length} exercises</span>
+                            {unlocked ? (
+                              <button className="btn btn-light" onClick={() => onStartLesson(lesson.id)}>
+                                <Play size={16} fill="currentColor" aria-hidden="true" />
+                                {complete ? "Practice again" : "Start lesson"}
+                                <span className="btn-xp">+{complete ? 10 : 15} XP</span>
+                              </button>
+                            ) : (
+                              <span className="locked-note">
+                                Finish the lessons above to unlock this one
+                                {isSectionUnlocked(progress, sectionIndex) || sectionIndex === 0
+                                  ? "."
+                                  : ", or take the section test."}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ))}
 
       {!current && (
         <section className="course-done">
@@ -125,7 +186,7 @@ export function LearnScreen({ progress, now, onStartLesson }: Props) {
             <NamedIcon name="fish" size={32} />
           </span>
           <h2>Course complete</h2>
-          <p>You've finished every lesson. Keep your edge sharp with practice drills.</p>
+          <p>You've finished every lesson. Keep your edge sharp with practice drills and the Daily Challenge.</p>
         </section>
       )}
 

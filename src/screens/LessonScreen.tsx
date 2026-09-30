@@ -32,6 +32,8 @@ interface Props {
   onBuyRefill: () => void;
   onQuit: () => void;
   onFinish: (result: { accuracy: number; durationMs: number; mistakes: number }) => void;
+  /** Tests ask each question once and never re-queue misses. */
+  mode?: "lesson" | "test";
 }
 
 const PRAISE = ["Correct", "Nice work", "Well read", "Exactly right", "Spot on"];
@@ -47,6 +49,7 @@ export function LessonScreen({
   onBuyRefill,
   onQuit,
   onFinish,
+  mode = "lesson",
 }: Props) {
   const [session, setSession] = useState(() => startSession(exercises.length));
   const [answer, setAnswer] = useState<Answer>(null);
@@ -81,7 +84,7 @@ export function LessonScreen({
 
   const next = useCallback(() => {
     if (!checked) return;
-    const updated = answerSession(session, checked.correct);
+    const updated = answerSession(session, checked.correct, mode !== "test");
     setChecked(null);
     setAnswer(null);
     setAttempt((a) => a + 1);
@@ -93,7 +96,7 @@ export function LessonScreen({
       });
     }
     setSession(updated);
-  }, [checked, session, onFinish]);
+  }, [checked, session, onFinish, mode]);
 
   // Keyboard: Enter to check / continue, number keys to pick an option.
   useEffect(() => {
@@ -120,7 +123,8 @@ export function LessonScreen({
 
   if (!exercise) return null;
 
-  const progress = sessionProgress(session) + (checked?.correct ? 1 / session.total : 0);
+  // Count the current exercise once it's checked: always in tests, only when right in lessons.
+  const progress = sessionProgress(session) + (checked && (checked.correct || mode === "test") ? 1 / session.total : 0);
   const retry = session.missed.includes(index!) && !checked;
 
   return (

@@ -14,6 +14,7 @@ import {
   rangePercent,
 } from "../poker/ranges";
 import { formatPercent, hitProbability, potOdds, ruleOf2And4 } from "../poker/math";
+import { COURSE, SECTIONS } from "./course";
 import type { ChoiceExercise, CompareExercise, Exercise, Skill } from "./types";
 
 type Random = () => number;
@@ -626,4 +627,31 @@ export const DAILY_LENGTH = 10;
 /** The same ten hands for everyone on a given day. */
 export function dailyChallenge(day: string): Exercise[] {
   return generateDrill("mixed", DAILY_LENGTH, seededRandom(`pokerlingo-daily-${day}`));
+}
+
+/** Exercise types that grade one answer quickly; matches and scenarios are left out of tests. */
+const TESTABLE = new Set(["choice", "compare", "order"]);
+
+/**
+ * A test-out covering every unit before `sectionIndex`: exercises are drawn round-robin
+ * across those units so each topic is represented.
+ */
+export function sectionTest(sectionIndex: number, length: number, random: Random = Math.random): Exercise[] {
+  const units = SECTIONS.slice(0, sectionIndex)
+    .flatMap((s) => s.unitIds)
+    .map((id) => COURSE.find((u) => u.id === id)!);
+  const pools = shuffle(units, random).map((u) =>
+    shuffle(
+      u.lessons.flatMap((l) => l.exercises).filter((e) => TESTABLE.has(e.type)),
+      random,
+    ),
+  );
+  const picked: Exercise[] = [];
+  for (let round = 0; picked.length < length && pools.some((p) => p.length > round); round++) {
+    for (const pool of pools) {
+      if (picked.length >= length) break;
+      if (pool[round]) picked.push(pool[round]);
+    }
+  }
+  return shuffle(picked, random);
 }

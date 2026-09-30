@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { initialProgress, Progress, refillHearts } from "./progress";
+import { initialProgress, migrateProgress, Progress, refillHearts } from "./progress";
 
 const STORAGE_KEY = "pokerlingo.progress.v1";
 
 function load(): Progress {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...initialProgress(), ...JSON.parse(raw) };
+    if (raw) return migrateProgress(JSON.parse(raw));
   } catch {
     // Storage unavailable or corrupt: start fresh.
   }
@@ -42,7 +42,9 @@ export function useProgress() {
   useEffect(() => save(progress), [progress]);
 
   const update = useCallback((fn: (p: Progress) => Progress) => setProgress((p) => fn(p)), []);
-  const reset = useCallback(() => setProgress(initialProgress()), []);
+  // A reset keeps the player past the welcome flow; they chose to start over, not to see it again.
+  const reset = useCallback(() => setProgress({ ...initialProgress(), onboarded: true }), []);
+  const replace = useCallback((p: Progress) => setProgress(refillHearts(p)), []);
 
-  return { progress, update, reset, now };
+  return { progress, update, reset, replace, now };
 }
