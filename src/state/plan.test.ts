@@ -118,6 +118,24 @@ describe("saved data", () => {
 
   it("lists every section and the exam on the track", () => {
     const track = topTrack(initialProgress(T0)).map((m) => m.id);
-    expect(track).toEqual(["section-0", "section-1", "section-2", "section-3", "core-silver", "gold-3", "speed-15", "streak-14", "exam"]);
+    expect(track).toEqual(["section-0", "section-1", "section-2", "section-3", "core-silver", "gold-3", "speed-15", "streak-14", "play-150", "exam"]);
+  });
+});
+
+describe("practice table sessions", () => {
+  it("add up lifetime stats, count as practice and pay XP by hands played", () => {
+    const play = { hands: 12, net: -35, good: 5, checked: 7 };
+    const first = completeSession(initialProgress(T0), { accuracy: 5 / 6, title: "Play: 6-max table", play }, T0);
+    expect(first.reward.xp).toBe(24);
+    expect(first.reward.gems).toBe(2);
+    const p = completeSession(first.progress, { accuracy: 1, title: "Play: 6-max table", play: { hands: 3, net: 20, good: 1, checked: 1 } }, T0).progress;
+    expect(p.play).toEqual({ hands: 15, net: -15, good: 6, checked: 8 });
+    expect(p.dayLog.drills).toBe(2);
+    expect(p.history[0].title).toBe("Play: 6-max table");
+    expect(topTrack(p).find((m) => m.id === "play-150")!.value).toBe(6);
+  });
+
+  it("repairs malformed play stats", () => {
+    expect(migrateProgress({ play: { hands: "x" } } as never, T0).play).toEqual({ hands: 0, net: 0, good: 0, checked: 0 });
   });
 });

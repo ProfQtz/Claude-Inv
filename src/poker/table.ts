@@ -425,8 +425,9 @@ function finish(s: HandState, showdown: boolean): HandState {
 
 export const chipsToBB = (chips: number) => chips / BB;
 
-/** Chips as big blinds for display: "2.5 BB", "100 BB". */
+/** Chips as big blinds for display: "2.5 BB", "100 BB", "−3 BB". */
 export function formatBB(chips: number): string {
-  const bb = Math.round((chips / BB) * 10) / 10;
-  return `${Number.isInteger(bb) ? bb : bb.toFixed(1)} BB`;
+  const bb = Math.round((Math.abs(chips) / BB) * 10) / 10;
+  const sign = chips < 0 && bb > 0 ? "−" : "";
+  return `${sign}${Number.isInteger(bb) ? bb : bb.toFixed(1)} BB`;
 }

@@ -1,4 +1,4 @@
-import { CalendarCheck, Check, ChevronRight, Gem, Heart, Play, Timer, Trophy } from "lucide-react";
+import { CalendarCheck, Check, ChevronRight, Gem, Heart, Play, Spade, Timer, Trophy } from "lucide-react";
 import { type CSSProperties, useState } from "react";
 import { DAILY_LENGTH, type DrillKind, SKILLS } from "../course/generator";
 import type { Skill } from "../course/types";
@@ -147,6 +147,7 @@ interface Props {
   onOpenRanges: () => void;
   onStartMix: (skills: Skill[]) => void;
   onSetLength: (length: number) => void;
+  onStartPlay: () => void;
 }
 
 /** Pick any combination of skills for a custom drill. */
@@ -245,7 +246,7 @@ function formatDay(day: string, today: string) {
 }
 
 export function PracticeScreen(props: Props) {
-  const { progress, now, onStart, onStartDaily, onStartReview, onStartSpeed, onOpenRanges, onStartMix, onSetLength } =
+  const { progress, now, onStart, onStartDaily, onStartReview, onStartSpeed, onOpenRanges, onStartMix, onSetLength, onStartPlay } =
     props;
   const [mixerOpen, setMixerOpen] = useState(false);
   const reviewCount = progress.reviewQueue.length;
@@ -268,6 +269,18 @@ export function PracticeScreen(props: Props) {
           </span>
         )}
       </header>
+
+      <button className="play-card" onClick={onStartPlay}>
+        <span className="play-card-art" aria-hidden="true">
+          <Spade size={26} />
+        </span>
+        <span className="row-text">
+          <span className="eyebrow">New · Practice table</span>
+          <strong>Play full hands</strong>
+          <span>Against simulated Nits, Stations, Maniacs and Regulars, with a coach reviewing every hand.</span>
+        </span>
+        <ChevronRight className="row-chevron" size={20} aria-hidden="true" />
+      </button>
 
       <section className={`daily-card ${dailyDone ? "done" : ""}`}>
         <span className="daily-date" aria-hidden="true">

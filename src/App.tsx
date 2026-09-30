@@ -37,6 +37,7 @@ import { SpeedRoundScreen } from "./screens/SpeedRoundScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { TestResultScreen } from "./screens/TestResultScreen";
 import { ExamResultScreen, type SkillScore } from "./screens/ExamResultScreen";
+import { PlayScreen, type PlaySummary } from "./screens/PlayScreen";
 import type { PlanAction } from "./state/plan";
 
 interface ActiveSession {
@@ -88,6 +89,8 @@ export default function App() {
   const [libraryView, setLibraryView] = useState<LibraryView | null>(null);
   const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
   const [examOutcome, setExamOutcome] = useState<ExamOutcome | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const playStarted = useRef(0);
   /** Per-question results of the exam in progress, for the score by skill. */
   const examAnswers = useRef<{ skill: Skill; correct: boolean }[]>([]);
 
@@ -163,6 +166,29 @@ export default function App() {
     }
     setExamOutcome({ passed, correct: Math.round(accuracy * total), total, bySkill: [...bySkill.values()], gems: reward.gems });
     setTab("learn");
+  }
+
+  function startPlay() {
+    playStarted.current = Date.now();
+    setPlaying(true);
+  }
+
+  function finishPlay(summary: PlaySummary | null) {
+    setPlaying(false);
+    if (!summary) return;
+    const checked = summary.good + summary.close + summary.mistakes;
+    // Accuracy counts clear verdicts only; close calls go either way.
+    const graded = summary.good + summary.mistakes;
+    const accuracy = graded > 0 ? summary.good / graded : 1;
+    const result = {
+      accuracy,
+      title: summary.title,
+      play: { hands: summary.hands, net: summary.net, good: summary.good, checked },
+    };
+    const { reward } = completeSession(progress, result);
+    update((p) => completeSession(p, result).progress);
+    if (progress.soundOn) playCue("complete");
+    setCompletion({ title: summary.title, reward, accuracy, durationMs: Date.now() - playStarted.current });
   }
 
   function handlePlan(action: PlanAction) {
@@ -282,6 +308,14 @@ export default function App() {
     );
   }
 
+  if (playing) {
+    return (
+      <div className="app focus">
+        <PlayScreen lifetime={{ hands: progress.play.hands, net: progress.play.net }} onExit={finishPlay} />
+      </div>
+    );
+  }
+
   if (speedRound) {
     return (
       <div className="app focus">
@@ -348,6 +382,7 @@ export default function App() {
             }}
             onStartMix={startMix}
             onSetLength={(n) => update((p) => ({ ...p, drillLength: n }))}
+            onStartPlay={startPlay}
           />
         )}
         {tab === "library" && <LibraryScreen view={libraryView} onView={setLibraryView} />}

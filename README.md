@@ -27,7 +27,8 @@ and shows your score by skill.
 The Profile tab tracks a **Path to top 10%**: finish all four sections, reach
 Silver mastery in the eight core skills (preflop, facing a raise, pot odds, bet
 math, equity, combos, bluff-catching, range advantage), Gold in any three skills,
-15 in a Speed Round, a 14-day streak and a pass in the final exam.
+15 in a Speed Round, a 14-day streak, 150 good decisions at the practice table
+and a pass in the final exam.
 It measures the knowledge and habits that separate winning players. Results at a
 real table also depend on experience, bankroll discipline and game selection.
 
@@ -53,6 +54,25 @@ real table also depend on experience, bankroll discipline and game selection.
 - Daily Challenge (the same ten hands for everyone each day), a 60-second Speed
   Round with a personal best, and a mistakes review that brings back missed
   questions until you get them right.
+
+**Practice table**
+- Play full no-limit hands against simulated opponents: heads-up against a
+  Nit, a Calling Station, a Maniac or a Regular, or at a 6-max table with a
+  mix of them. Stacks reset to 100 BB every hand.
+- The opponents are probability policies: preflop they rank hands by the Chen
+  formula (the Regular follows the 6-max charts), and postflop they act on
+  hand strength, draws, position, initiative and the price, each in its own
+  style.
+- After every hand the coach reviews your decisions. Because each opponent's
+  strategy is known, it rebuilds the exact range of hands that opponent would
+  have played the way it did. It then grades:
+  - preflop opens and responses to a raise against the charts (6-max);
+  - every call and fold against a bet, by your equity against those ranges
+    versus the price;
+  - river bets and checks when you're last to act heads-up, by comparing the
+    EV of betting with checking given how the opponent responds.
+- Session results, lifetime stats and a "150 good decisions" milestone on the
+  Path to top 10%.
 
 **Library**
 - Strategy charts: a heads-up push/fold Nash equilibrium solved in the browser
@@ -81,6 +101,11 @@ Range-advantage answers come from range-vs-range equity sampled 20,000 times per
 flop. Opening and facing-a-raise charts are simplified baselines written for
 learning, not solver output, and the river drill uses a stated, stylized betting
 range (two pair or better, or a missed draw).
+
+The practice-table opponents play fixed, readable styles, not equilibrium
+strategies. The coach's equity numbers are exact against the ranges those
+styles produce (sampled where the board isn't complete). On the flop and turn
+they ignore later betting, so the coach treats close spots as close.
 
 ## Development
 
@@ -131,11 +156,12 @@ free, confidential help.
 
 ```
 src/
-  poker/       cards, hand evaluator, equity, ranges, solvers, calculator, variance, cheat sheets
+  poker/       cards, hand evaluator, equity, ranges, solvers, calculator, variance,
+               table engine, simulated opponents, coach
   course/      course content, glossary, exercise types, drill and exam generator
   state/       progress rules (XP, hearts, streaks, mastery, backups), study plan, sessions
   components/  playing cards, exercise views, app shell, error screen
-  screens/     Onboarding, Learn, Lesson, Practice, Library and tools, Shop, Profile
+  screens/     Onboarding, Learn, Lesson, Practice, Play, Library and tools, Shop, Profile
 public/        icons and web manifest
 scripts/       equity table generators
 ```

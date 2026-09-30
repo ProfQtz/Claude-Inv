@@ -5,6 +5,7 @@ import {
   act,
   BB,
   buildPots,
+  formatBB,
   type HandState,
   legalActions,
   newHand,
@@ -35,6 +36,15 @@ function rig(s: HandState, holes: string[], board: string): HandState {
 
 const play = (s: HandState, ...actions: TableAction[]) => actions.reduce((state, a) => act(state, a), s);
 const conserved = (s: HandState) => s.result!.won.reduce((a, b) => a + b, 0) === potSize(s);
+
+describe("formatting", () => {
+  it("shows chips as big blinds with a real minus sign", () => {
+    expect(formatBB(25)).toBe("2.5 BB");
+    expect(formatBB(1000)).toBe("100 BB");
+    expect(formatBB(-35)).toBe("−3.5 BB");
+    expect(formatBB(0)).toBe("0 BB");
+  });
+});
 
 describe("seats and blinds", () => {
   it("labels positions", () => {

@@ -33,6 +33,14 @@ export interface LessonRecord {
   bestAccuracy: number;
 }
 
+/** Lifetime results at the practice table. Net is in chips (10 per big blind). */
+export interface PlayStats {
+  hands: number;
+  net: number;
+  good: number;
+  checked: number;
+}
+
 /** What was finished on one day, for the daily study plan. */
 export interface DayLog {
   day: string;
@@ -77,6 +85,7 @@ export interface Progress {
   examBest: number;
   /** Day the final exam was first passed. */
   examPassedOn: string | null;
+  play: PlayStats;
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -106,6 +115,7 @@ export function initialProgress(now = Date.now()): Progress {
     dayLog: { day: "", lessons: 0, drills: 0, reviews: 0 },
     examBest: 0,
     examPassedOn: null,
+    play: { hands: 0, net: 0, good: 0, checked: 0 },
   };
 }
 
@@ -130,6 +140,8 @@ export function migrateProgress(saved: Partial<Progress>, now = Date.now()): Pro
   p.history = p.history.filter(
     (h): h is PracticeRecord => isObj(h) && typeof h.day === "string" && typeof h.title === "string" && isNum(h.accuracy),
   );
+  const play = p.play as unknown as Record<string, unknown>;
+  if (!(isNum(play.hands) && isNum(play.net) && isNum(play.good) && isNum(play.checked))) p.play = initialProgress(now).play;
   const log = p.dayLog as unknown as Record<string, unknown>;
   if (!(typeof log.day === "string" && isNum(log.lessons) && isNum(log.drills) && isNum(log.reviews))) {
     p.dayLog = initialProgress(now).dayLog;
@@ -303,6 +315,8 @@ export interface SessionResult {
   review?: boolean;
   /** The final exam. */
   exam?: boolean;
+  /** A session at the practice table. */
+  play?: PlayStats;
 }
 
 export interface Reward {
@@ -317,6 +331,10 @@ export function rewardFor(result: SessionResult): Reward {
   const perfect = result.accuracy >= 1;
   if (result.test) {
     return { xp: 15, gems: passedTest(result.accuracy) ? 20 : 0, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
+  }
+  if (result.play) {
+    const hands = result.play.hands;
+    return { xp: Math.min(30, 2 * hands), gems: hands >= 10 ? 2 : 0, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
   }
   if (result.exam) {
     // The first pass also pays EXAM_FIRST_PASS_GEMS; completeSession adds it.
@@ -395,6 +413,14 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     dayLog,
     examBest: result.exam ? Math.max(p.examBest, result.accuracy) : p.examBest,
     examPassedOn: firstPass ? today : p.examPassedOn,
+    play: result.play
+      ? {
+          hands: p.play.hands + result.play.hands,
+          net: p.play.net + result.play.net,
+          good: p.play.good + result.play.good,
+          checked: p.play.checked + result.play.checked,
+        }
+      : p.play,
   };
   return { progress, reward };
 }
@@ -569,6 +595,13 @@ export function topTrack(p: Progress): Milestone[] {
       description: "Steady practice beats cramming",
       value: Math.min(14, p.longestStreak),
       target: 14,
+    },
+    {
+      id: "play-150",
+      title: "Make 150 good decisions at the table",
+      description: "Coach-approved calls, folds, river bets and preflop plays in practice hands",
+      value: Math.min(150, p.play.good),
+      target: 150,
     },
     {
       id: "exam",

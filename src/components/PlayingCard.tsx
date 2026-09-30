@@ -2,7 +2,7 @@ import { Card, isRed, parseCards, SUIT_NAME, SUIT_SYMBOL, RANK_NAME } from "../p
 
 interface Props {
   card: Card;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
   highlight?: boolean;
   dim?: boolean;
 }
@@ -47,4 +47,9 @@ export function CardRow({ cards, size, highlight }: RowProps) {
       })}
     </div>
   );
+}
+
+/** A face-down card. */
+export function CardBack({ size = "md" }: { size?: "xs" | "sm" | "md" }) {
+  return <div className={`card back ${size}`} role="img" aria-label="Hidden card" />;
 }
