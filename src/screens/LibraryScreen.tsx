@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, ChevronRight, Grid3x3, Search, Table2, TextSearch } from "lucide-react";
+import { ArrowLeft, BookOpen, Calculator, ChartSpline, ChevronRight, Grid3x3, Search, Table2, TextSearch } from "lucide-react";
 import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 import { COURSE, SECTIONS } from "../course/course";
 import { GLOSSARY } from "../course/glossary";
@@ -6,8 +6,9 @@ import { NamedIcon } from "../components/Icons";
 import { BET_SIZE_TABLE, matchupTable, ODDS_TABLE, OUTS_TABLE } from "../poker/cheatsheet";
 import { formatPercent } from "../poker/math";
 import { RangesScreen } from "./RangesScreen";
+import { EquityCalculator, VarianceTool } from "./ToolsScreens";
 
-export type LibraryView = "charts" | "glossary" | "cheats" | "guides";
+export type LibraryView = "charts" | "equity" | "variance" | "glossary" | "cheats" | "guides";
 
 const pct1 = (x: number) => `${(x * 100).toFixed(1)}%`;
 
@@ -219,6 +220,20 @@ const ENTRIES: { view: LibraryView; title: string; body: string; icon: ReactNode
     tone: "brand",
   },
   {
+    view: "equity",
+    title: "Equity calculator",
+    body: "Your hand against a hand or a range, on any board.",
+    icon: <Calculator size={22} aria-hidden="true" />,
+    tone: "red",
+  },
+  {
+    view: "variance",
+    title: "Variance & bankroll",
+    body: "How big the swings get, and how many buy-ins you need.",
+    icon: <ChartSpline size={22} aria-hidden="true" />,
+    tone: "brand",
+  },
+  {
     view: "cheats",
     title: "Cheat sheets",
     body: "Outs, bet sizes, preflop matchups and everyday odds.",
@@ -244,6 +259,18 @@ const ENTRIES: { view: LibraryView; title: string; body: string; icon: ReactNode
 export function LibraryScreen({ view, onView }: { view: LibraryView | null; onView: (v: LibraryView | null) => void }) {
   const back = () => onView(null);
   if (view === "charts") return <RangesScreen onBack={back} backLabel="Library" />;
+  if (view === "equity")
+    return (
+      <SubPage title="Equity calculator" lead="Pick cards to see how often your hand wins. Exact where possible, simulated otherwise." onBack={back}>
+        <EquityCalculator />
+      </SubPage>
+    );
+  if (view === "variance")
+    return (
+      <SubPage title="Variance & bankroll" lead="Even winning players have long losing stretches. See how long, and what bankroll survives them." onBack={back}>
+        <VarianceTool />
+      </SubPage>
+    );
   if (view === "glossary") return <Glossary onBack={back} />;
   if (view === "cheats") return <CheatSheets onBack={back} />;
   if (view === "guides") return <Guidebooks onBack={back} />;
