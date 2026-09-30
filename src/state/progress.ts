@@ -1,4 +1,4 @@
-import { COURSE, LESSON_ORDER, sectionLessons } from "../course/course";
+import { COURSE, LESSON_ORDER, SECTIONS, sectionLessons } from "../course/course";
 import { SKILLS } from "../course/generator";
 import type { Skill } from "../course/types";
 
@@ -33,6 +33,14 @@ export interface LessonRecord {
   bestAccuracy: number;
 }
 
+/** What was finished on one day, for the daily study plan. */
+export interface DayLog {
+  day: string;
+  lessons: number;
+  drills: number;
+  reviews: number;
+}
+
 export interface Progress {
   xp: number;
   gems: number;
@@ -63,6 +71,12 @@ export interface Progress {
   customMix: Skill[];
   /** Whether the welcome flow has been completed (or skipped). */
   onboarded: boolean;
+  /** Today's finished sessions; reset on a new day. */
+  dayLog: DayLog;
+  /** Best final exam score, as a fraction. */
+  examBest: number;
+  /** Day the final exam was first passed. */
+  examPassedOn: string | null;
 }
 
 export function initialProgress(now = Date.now()): Progress {
@@ -89,6 +103,9 @@ export function initialProgress(now = Date.now()): Progress {
     history: [],
     customMix: [],
     onboarded: false,
+    dayLog: { day: "", lessons: 0, drills: 0, reviews: 0 },
+    examBest: 0,
+    examPassedOn: null,
   };
 }
 
@@ -113,6 +130,10 @@ export function migrateProgress(saved: Partial<Progress>, now = Date.now()): Pro
   p.history = p.history.filter(
     (h): h is PracticeRecord => isObj(h) && typeof h.day === "string" && typeof h.title === "string" && isNum(h.accuracy),
   );
+  const log = p.dayLog as unknown as Record<string, unknown>;
+  if (!(typeof log.day === "string" && isNum(log.lessons) && isNum(log.drills) && isNum(log.reviews))) {
+    p.dayLog = initialProgress(now).dayLog;
+  }
   if (typeof src.onboarded !== "boolean") p.onboarded = Object.keys(p.lessons).length > 0 || p.xp > 0;
   return p;
 }
@@ -133,6 +154,20 @@ function sameShape(value: unknown, fallback: unknown): boolean {
 }
 
 export const SECTION_TEST_LENGTH = 12;
+
+/** The final exam: 20 questions across the advanced skills, 17 to pass. */
+export const EXAM_LENGTH = 20;
+export const EXAM_PASS = 0.85;
+export const EXAM_FIRST_PASS_GEMS = 50;
+
+export function passedExam(accuracy: number): boolean {
+  return accuracy >= EXAM_PASS - 1e-9;
+}
+
+/** The final exam opens once the Advanced section is done (the last section is unlocked). */
+export function isExamUnlocked(p: Progress): boolean {
+  return isSectionUnlocked(p, SECTIONS.length - 1);
+}
 /** Pass mark for a test-out: 10 of 12. */
 export const SECTION_TEST_PASS = 0.8;
 
@@ -264,6 +299,10 @@ export interface SessionResult {
   daily?: boolean;
   /** A placement or test-out test. */
   test?: boolean;
+  /** A mistakes review session. */
+  review?: boolean;
+  /** The final exam. */
+  exam?: boolean;
 }
 
 export interface Reward {
@@ -278,6 +317,10 @@ export function rewardFor(result: SessionResult): Reward {
   const perfect = result.accuracy >= 1;
   if (result.test) {
     return { xp: 15, gems: passedTest(result.accuracy) ? 20 : 0, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
+  }
+  if (result.exam) {
+    // The first pass also pays EXAM_FIRST_PASS_GEMS; completeSession adds it.
+    return { xp: 30, gems: 0, heartsRestored: 0, streakExtended: false, freezesUsed: 0 };
   }
   if (result.daily) {
     return { xp: 20 + (perfect ? 5 : 0), gems: 20, heartsRestored: 1, streakExtended: false, freezesUsed: 0 };
@@ -316,6 +359,18 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     };
   }
 
+  const firstPass = result.exam && passedExam(result.accuracy) && !p.examPassedOn;
+  if (firstPass) reward.gems += EXAM_FIRST_PASS_GEMS;
+
+  const log = p.dayLog.day === today ? p.dayLog : { day: today, lessons: 0, drills: 0, reviews: 0 };
+  const practice = !result.lessonId && !result.test && !result.exam && !result.review && !result.daily;
+  const dayLog = {
+    day: today,
+    lessons: log.lessons + (result.lessonId ? 1 : 0),
+    drills: log.drills + (practice ? 1 : 0),
+    reviews: log.reviews + (result.review ? 1 : 0),
+  };
+
   const refilled = refillHearts(p, now);
   const hearts = Math.min(MAX_HEARTS, refilled.hearts + reward.heartsRestored);
 
@@ -332,11 +387,14 @@ export function completeSession(p: Progress, result: SessionResult, now = Date.n
     xpByDay: { ...p.xpByDay, [today]: (p.xpByDay[today] ?? 0) + reward.xp },
     lessons,
     perfectLessons: p.perfectLessons + (result.lessonId && result.accuracy >= 1 ? 1 : 0),
-    drillsCompleted: p.drillsCompleted + (result.lessonId || result.test ? 0 : 1),
+    drillsCompleted: p.drillsCompleted + (result.lessonId || result.test || result.exam ? 0 : 1),
     dailyDone: result.daily ? today : p.dailyDone,
     history: result.lessonId || result.test
       ? p.history
       : [{ day: today, title: result.title ?? "Practice", accuracy: result.accuracy }, ...p.history].slice(0, MAX_HISTORY),
+    dayLog,
+    examBest: result.exam ? Math.max(p.examBest, result.accuracy) : p.examBest,
+    examPassedOn: firstPass ? today : p.examPassedOn,
   };
   return { progress, reward };
 }
@@ -465,13 +523,13 @@ export interface Milestone {
 }
 
 /** Skills a strong regular uses every session; the track asks for Silver in all of them. */
-export const CORE_SKILLS: Skill[] = ["preflop", "vsOpen", "potOdds", "betMath", "equity", "combos"];
+export const CORE_SKILLS: Skill[] = ["preflop", "vsOpen", "potOdds", "betMath", "equity", "combos", "bluffCatch", "rangeEdge"];
 
 const TIER_RANK: Record<Mastery, number> = { Learning: 0, Bronze: 1, Silver: 2, Gold: 3 };
 
 /**
- * The "Path to top 10%": finish all three sections and prove the core skills in practice.
- * It measures knowledge and drill accuracy, not results at real tables.
+ * The "Path to top 10%": finish every section, prove the core skills in practice and pass
+ * the final exam. It measures knowledge and drill accuracy, not results at real tables.
  */
 export function topTrack(p: Progress): Milestone[] {
   const section = (i: number, title: string): Milestone => {
@@ -482,13 +540,12 @@ export function topTrack(p: Progress): Milestone[] {
     skills.filter((s) => TIER_RANK[skillMastery(p, s)] >= TIER_RANK[tier]).length;
   const allSkills = Object.keys(p.skills) as Skill[];
   return [
-    section(0, "Foundations"),
-    section(1, "Winning Fundamentals"),
-    section(2, "Advanced"),
+    ...SECTIONS.map((s, i) => section(i, s.title)),
     {
       id: "core-silver",
-      title: "Silver in the six core skills",
-      description: "Open or Fold, Facing a Raise, Pot Odds, Bet Math, Hand vs Hand and Combos",
+      title: "Silver in the eight core skills",
+      description:
+        "Open or Fold, Facing a Raise, Pot Odds, Bet Math, Hand vs Hand, Combos, Bluff-Catching and Range Advantage",
       value: tierCount("Silver", CORE_SKILLS),
       target: CORE_SKILLS.length,
     },
@@ -512,6 +569,13 @@ export function topTrack(p: Progress): Milestone[] {
       description: "Steady practice beats cramming",
       value: Math.min(14, p.longestStreak),
       target: 14,
+    },
+    {
+      id: "exam",
+      title: "Pass the final exam",
+      description: `${Math.ceil(EXAM_LENGTH * EXAM_PASS)} of ${EXAM_LENGTH} across the advanced skills`,
+      value: p.examPassedOn ? 1 : 0,
+      target: 1,
     },
   ];
 }

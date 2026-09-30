@@ -199,6 +199,8 @@ p {
 .app {
   min-height: 100vh;
   background: var(--bg);
+  /* Entrance animations slide content in from the side; never let that scroll the page sideways. */
+  overflow-x: clip;
 }
 
 .shell {
@@ -2458,13 +2460,15 @@ p {
 
 .speed-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
   width: 100%;
   max-width: 400px;
 }
 
 .speed-actions .btn {
-  flex: 1;
+  flex: 1 1 auto;
 }
 
 .lesson-progress.timer > div {
@@ -4116,4 +4120,174 @@ p {
   .tool-stats > div:last-child:nth-child(odd) {
     grid-column: 1 / -1;
   }
+}
+
+/* ---------- Today's plan ---------- */
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.plan-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plan-head > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-head strong {
+  font-size: 1.02rem;
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.plan-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 4px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  text-align: left;
+}
+
+.plan-item:hover {
+  background: var(--surface-2);
+}
+
+.plan-item .row-text strong {
+  font-size: 0.98rem;
+}
+
+.plan-item .row-text > span {
+  font-size: 0.86rem;
+}
+
+.plan-item.done .track-check {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
+.plan-item.done .row-text strong {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+/* ---------- Final exam ---------- */
+
+.exam-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 28px 0 8px;
+  padding: 24px 20px;
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, var(--border));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--gold-soft) 90%, transparent), transparent 70%),
+    var(--surface);
+  text-align: center;
+}
+
+.exam-card h2 {
+  font-size: 1.4rem;
+}
+
+.exam-card p {
+  max-width: 52ch;
+  color: var(--ink-2);
+}
+
+.exam-card.locked .icon-disc {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.exam-card .locked-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.exam-status {
+  color: var(--brand) !important;
+  font-weight: 700;
+}
+
+.exam-result .pill.gems {
+  margin-bottom: 4px;
+}
+
+.exam-skills {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 420px;
+  margin: 4px 0 12px;
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  list-style: none;
+  text-align: left;
+}
+
+.exam-skills li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.exam-skills li + li {
+  border-top: 1px solid var(--border);
+}
+
+.exam-marks {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.mark {
+  padding: 2px;
+  border-radius: 50%;
+}
+
+.mark.ok {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.mark.miss {
+  background: var(--red-soft);
+  color: var(--red);
 }

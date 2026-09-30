@@ -1,10 +1,13 @@
-import { BookOpen, Check, Crown, Lock, Play, Star, Zap } from "lucide-react";
+import { BadgeCheck, BookOpen, Check, ChevronRight, Crown, ListChecks, Lock, Play, Star, Zap } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { COURSE, SECTIONS } from "../course/course";
 import type { Unit } from "../course/types";
 import { DailyGoalCard } from "../components/Shell";
 import { NamedIcon } from "../components/Icons";
 import {
+  EXAM_LENGTH,
+  EXAM_PASS,
+  isExamUnlocked,
   isLessonComplete,
   isLessonUnlocked,
   isSectionUnlocked,
@@ -12,8 +15,11 @@ import {
   Progress,
   SECTION_TEST_LENGTH,
   sectionProgress,
+  skillAccuracy,
   unitProgress,
 } from "../state/progress";
+import { dailyPlan, type PlanAction, type PlanItem } from "../state/plan";
+import { DRILL_INFO } from "./PracticeScreen";
 
 interface Props {
   progress: Progress;
@@ -21,6 +27,83 @@ interface Props {
   onStartLesson: (lessonId: string) => void;
   /** Start a test that unlocks the given section. */
   onTestOut: (sectionIndex: number) => void;
+  onPlan: (action: PlanAction) => void;
+}
+
+function planDetail(item: PlanItem, progress: Progress): string {
+  if (item.action.kind !== "drill") return item.detail;
+  const accuracy = skillAccuracy(progress, item.action.skill);
+  const title = DRILL_INFO[item.action.skill].title;
+  return accuracy === null ? `${title} · new for you` : `${title} · ${Math.round(accuracy * 100)}% so far`;
+}
+
+function TodayPlan({ progress, now, onPlan }: { progress: Progress; now: number; onPlan: (action: PlanAction) => void }) {
+  const items = dailyPlan(progress, now);
+  const done = items.filter((i) => i.done).length;
+  return (
+    <section className="plan-card" aria-labelledby="plan-title">
+      <div className="plan-head">
+        <span className="icon-tile brand">
+          <ListChecks size={20} aria-hidden="true" />
+        </span>
+        <div>
+          <span className="eyebrow" id="plan-title">
+            Today's plan
+          </span>
+          <strong>{done === items.length ? "All done for today. Nice work." : `${done} of ${items.length} done`}</strong>
+        </div>
+      </div>
+      <ul className="plan-list">
+        {items.map((item) => (
+          <li key={item.id}>
+            <button className={`plan-item ${item.done ? "done" : ""}`} onClick={() => onPlan(item.action)}>
+              <span className="track-check" aria-hidden="true">
+                {item.done && <Check size={14} strokeWidth={3} />}
+              </span>
+              <span className="row-text">
+                <strong>{item.title}</strong>
+                <span>{planDetail(item, progress)}</span>
+              </span>
+              <ChevronRight className="row-chevron" size={18} aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ExamCard({ progress, onStart }: { progress: Progress; onStart: () => void }) {
+  const unlocked = isExamUnlocked(progress);
+  const needed = Math.ceil(EXAM_LENGTH * EXAM_PASS);
+  const best = Math.round(progress.examBest * 100);
+  return (
+    <section className={`exam-card ${unlocked ? "" : "locked"}`}>
+      <span className="icon-disc gold">
+        <BadgeCheck size={30} aria-hidden="true" />
+      </span>
+      <span className="eyebrow">Final exam</span>
+      <h2>Prove your skills</h2>
+      <p>
+        {EXAM_LENGTH} fresh questions on preflop ranges, facing raises, push/fold, pot odds, bet math, equity, combos,
+        call-or-fold, bluff-catching and range advantage. Get {needed} right to pass.
+      </p>
+      {progress.examPassedOn ? (
+        <p className="exam-status">Passed · best score {best}%</p>
+      ) : progress.examBest > 0 ? (
+        <p className="exam-status">Best so far: {best}%</p>
+      ) : null}
+      {unlocked ? (
+        <button className="btn btn-primary" onClick={onStart}>
+          {progress.examPassedOn ? "Retake the exam" : "Start the exam"}
+        </button>
+      ) : (
+        <span className="locked-note">
+          <Lock size={14} aria-hidden="true" /> Finish the Advanced section to unlock
+        </span>
+      )}
+    </section>
+  );
 }
 
 /** Horizontal offsets that make the lesson path snake left and right. */
@@ -64,7 +147,7 @@ function SectionHeader({
   );
 }
 
-export function LearnScreen({ progress, now, onStartLesson, onTestOut }: Props) {
+export function LearnScreen({ progress, now, onStartLesson, onTestOut, onPlan }: Props) {
   const current = nextLessonId(progress);
   const [selected, setSelected] = useState<string | null>(null);
   const [guidebook, setGuidebook] = useState<Unit | null>(null);
@@ -79,6 +162,7 @@ export function LearnScreen({ progress, now, onStartLesson, onTestOut }: Props) 
       <div className="mobile-only">
         <DailyGoalCard progress={progress} now={now} />
       </div>
+      <TodayPlan progress={progress} now={now} onPlan={onPlan} />
 
       {SECTIONS.map((section, sectionIndex) => (
         <div key={section.id} className="section-block">
@@ -179,6 +263,8 @@ export function LearnScreen({ progress, now, onStartLesson, onTestOut }: Props) 
           })}
         </div>
       ))}
+
+      <ExamCard progress={progress} onStart={() => onPlan({ kind: "exam" })} />
 
       {!current && (
         <section className="course-done">

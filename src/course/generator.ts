@@ -817,3 +817,25 @@ export function sectionTest(sectionIndex: number, length: number, random: Random
   }
   return shuffle(picked, random);
 }
+
+/** The final exam's skills: two questions each, across the decisions strong players make every session. */
+export const EXAM_SKILLS: Skill[] = [
+  "preflop",
+  "vsOpen",
+  "pushFold",
+  "potOdds",
+  "betMath",
+  "equity",
+  "combos",
+  "callFold",
+  "bluffCatch",
+  "rangeEdge",
+];
+
+/** A fresh final exam: every exam skill twice, in random order. */
+export function finalExam(random: Random = Math.random): Exercise[] {
+  return shuffle(
+    EXAM_SKILLS.flatMap((skill) => [generateExercise(skill, random), generateExercise(skill, random)]),
+    random,
+  );
+}
