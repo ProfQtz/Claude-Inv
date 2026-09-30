@@ -104,4 +104,12 @@ export const GLOSSARY: GlossaryEntry[] = [
   { term: "VPIP", definition: "Voluntarily put money in pot: how often a player calls or raises before the flop." },
   { term: "Wet board", definition: "A board with many possible draws, like J♥ T♥ 9♣." },
   { term: "Wheel", definition: "The lowest straight, A-2-3-4-5, where the ace plays low." },
+  { term: "Brick", definition: "A turn or river card that changes nothing: it completes no draws and pairs nothing important." },
+  { term: "Card removal", definition: "How the cards you can see change the combos villain can hold. Also called blockers." },
+  { term: "Committed", definition: "Having so much of your stack in the pot, compared with what is left, that folding would give up too much." },
+  { term: "Initiative", definition: "Being the last player to bet or raise. The player with the initiative can often win the pot with a continuation bet." },
+  { term: "Leak", definition: "A mistake a player repeats, which costs money over time." },
+  { term: "Missed draw", definition: "A straight or flush draw that did not complete by the river. Missed draws are natural bluffs." },
+  { term: "Results-oriented thinking", definition: "Judging a decision by how the hand turned out instead of by its expected value." },
+  { term: "Stop-loss", definition: "A limit on how much you will lose in a session before you stop playing." },
 ];

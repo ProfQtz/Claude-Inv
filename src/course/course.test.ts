@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseCards } from "../poker/cards";
 import { COURSE, drillRef, exerciseByRef, exerciseRef, LESSON_ORDER, SECTIONS, sectionLessons } from "./course";
-import { potOdds } from "../poker/math";
-import { solvePushFold } from "../poker/nash";
+import { hitProbability, potOdds } from "../poker/math";
+import { classEquity, solvePushFold } from "../poker/nash";
+import { fullDeck, shuffle } from "../poker/cards";
+import { choose } from "../poker/cheatsheet";
 import {
   countCombos,
   countOuts,
@@ -455,5 +457,148 @@ describe("range advantage drill", () => {
       );
       expect(equities[e.answer] - equities[1 - e.answer]).toBeGreaterThan(EDGE_GAP / 2);
     }
+  });
+});
+
+describe("mastery math claims", () => {
+  const lesson = (id: string) => COURSE.flatMap((u) => u.lessons).find((l) => l.id === id)!;
+  const exercise = (id: string, i: number) => lesson(id).exercises[i];
+  const answerOf = (id: string, i: number) => {
+    const e = exercise(id, i);
+    if (e.type !== "choice") throw new Error(`${id}#${i} is not a choice`);
+    return e.options[e.answer];
+  };
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  const visible = (id: string, i: number) => {
+    const e = exercise(id, i);
+    if (e.type !== "choice") throw new Error("expected choice");
+    return parseCards(`${e.hand} ${e.board}`);
+  };
+
+  it("SPR examples", () => {
+    expect(`About ${Math.round(97.5 / 5.5)}`).toBe(answerOf("spr-1", 1));
+    expect(`About ${Math.round((90 / 20.5) * 10) / 10}`).toBe(answerOf("spr-1", 2));
+    expect(2.5 + 2.5 + 0.5).toBe(5.5);
+    expect(10 + 10 + 0.5).toBe(20.5);
+    expect(30 / 20).toBe(1.5);
+  });
+
+  it("three pot-size bets at SPR 13 are exactly all-in", () => {
+    let [pot, stack] = [10, 130];
+    for (let street = 0; street < 3; street++) {
+      const bet = Math.min(pot, stack);
+      stack -= bet;
+      pot += 2 * bet;
+    }
+    expect(stack).toBe(0);
+    expect(answerOf("spr-2", 1)).toMatch(/^Nothing/);
+  });
+
+  it("set mining odds", () => {
+    const set = 1 - choose(48, 3) / choose(50, 3);
+    expect(`About ${Math.round(set * 100)}%`).toBe(answerOf("spr-3", 0));
+    expect(`About ${Math.round(((1 - set) / set) * 2.5)} BB`).toBe(answerOf("spr-3", 2 - 1));
+  });
+
+  it("3-bet pot size", () => {
+    expect(`${9 + 9 + 1.5} BB`).toBe(answerOf("bigpots-1", 0));
+    expect(Math.round((91 / 19.5) * 10) / 10).toBe(4.7);
+  });
+
+  it("AA against one, two and four random hands", () => {
+    const random = seededRandom("multiway");
+    const aa = parseCards("As Ah");
+    const rest = fullDeck().filter((c) => !(c.rank === "A" && (c.suit === "s" || c.suit === "h")));
+    const share = (opponents: number, samples: number) => {
+      let won = 0;
+      for (let n = 0; n < samples; n++) {
+        const deck = shuffle(rest, random);
+        const board = deck.slice(0, 5);
+        const hero = score7([...aa, ...board]);
+        const others = Array.from({ length: opponents }, (_, k) => score7([...deck.slice(5 + 2 * k, 7 + 2 * k), ...board]));
+        const best = Math.max(hero, ...others);
+        if (hero === best) won += 1 / (1 + others.filter((o) => o === best).length);
+      }
+      return won / samples;
+    };
+    expect(Math.abs(share(1, 20000) - 0.85)).toBeLessThan(0.015);
+    expect(Math.abs(share(2, 20000) - 0.73)).toBeLessThan(0.015);
+    const four = share(4, 20000);
+    expect(Math.abs(four - 0.56)).toBeLessThan(0.015);
+    expect(`About ${Math.round(four * 100)}%`).toBe(answerOf("bigpots-2", 0));
+  });
+
+  it("bluffing two players", () => expect(pct(0.5 * 0.5)).toBe(answerOf("bigpots-2", 1)));
+
+  it("thin value EV", () => expect(`+$${0.6 * 50 - 0.4 * 50}`).toBe(answerOf("river-1", 1)));
+
+  it("the thin value river is quiet: no straight or flush is possible", () => {
+    const board = visible("river-1", 2).slice(2);
+    const seen = new Set(visible("river-1", 2).map((c) => c.rank + c.suit));
+    const deck = fullDeck().filter((c) => !seen.has(c.rank + c.suit));
+    for (let a = 0; a < deck.length; a++)
+      for (let b = a + 1; b < deck.length; b++) {
+        const category = scoreCategory(score7([deck[a], deck[b], ...board]));
+        expect([HandCategory.Straight, HandCategory.Flush, HandCategory.StraightFlush]).not.toContain(category);
+      }
+  });
+
+  it("bluff-catching counts", () => {
+    expect(6 / 18).toBeGreaterThan(potOdds(150, 50));
+    expect(answerOf("river-2", 1)).toBe("Call");
+    expect(4 / 16).toBeLessThan(potOdds(200, 100));
+    expect(answerOf("river-2", 2)).toBe("Fold");
+  });
+
+  it("blocker combos", () => {
+    expect(String(countCombos("KK", visible("river-3", 1)))).toBe(answerOf("river-3", 1));
+    expect(String(countCombos("K9", visible("river-3", 2)))).toBe(answerOf("river-3", 2));
+  });
+
+  it("overbet math", () => {
+    expect(pct(2 / 3)).toBe(answerOf("river-4", 1));
+    expect(pct(2 / 5)).toBe(answerOf("river-4", 2));
+  });
+
+  it("leak spots", () => {
+    expect(pct(potOdds(3.5, 1))).toBe(answerOf("leaks-1", 2));
+    const cards = visible("leaks-2", 0);
+    expect(countOuts(cards.slice(0, 2), cards.slice(2))).toHaveLength(4);
+    expect(Math.round(hitProbability(4, 1) * 100)).toBe(9);
+    expect(Math.round(potOdds(200, 100) * 100)).toBe(33);
+    expect(Math.round(classEquity("AA", "72o") * 100)).toBe(88);
+  });
+
+  it("hand lab pots add up", () => {
+    const pots = (id: string, i: number) => {
+      const e = exercise(id, i);
+      if (e.type !== "scenario") throw new Error("expected scenario");
+      return e.steps.filter((s) => s.info).map((s) => s.info!.find((x) => x.label === "Pot")!.value);
+    };
+    const bb = (values: number[]) => values.map((v) => `${v} BB`);
+    // Charge the draws: 5.5, +4+4, +9+9.
+    expect(pots("handlab-1", 0)).toEqual(bb([5.5, 5.5 + 8, 5.5 + 8 + 18]));
+    expect(100 - 2.5 - 4 - 9).toBe(84.5);
+    // 3-bet pot: 8 + 8 + blinds, then +6+6, then +20+20; stacks 92, 86, 66 behind.
+    expect(pots("handlab-1", 1)).toEqual(bb([17.5, 17.5 + 12, 17.5 + 12 + 40]));
+    expect([100 - 8, 100 - 8 - 6, 100 - 8 - 6 - 20]).toEqual([92, 86, 66]);
+    // Nut flush draw: 5.5, +2+2, +6+6.
+    expect(pots("handlab-2", 0)).toEqual(bb([5.5, 9.5, 21.5]));
+    // Overpair: 5.5, +3+3, +8+8.
+    expect(pots("handlab-3", 0)).toEqual(bb([5.5, 11.5, 27.5]));
+    // Big blind: 5.5 on the flop, then +2+2 with the turn checked through.
+    expect(pots("handlab-3", 1)).toEqual(bb([5.5, 9.5]));
+  });
+
+  it("the nut flush draw gets there with the best possible hand", () => {
+    const e = exercise("handlab-2", 0);
+    if (e.type !== "scenario") throw new Error("expected scenario");
+    const hero = parseCards(e.hand);
+    const board = parseCards(e.steps.at(-1)!.board!);
+    const heroScore = score7([...hero, ...board]);
+    const seen = new Set([...hero, ...board].map((c) => c.rank + c.suit));
+    const deck = fullDeck().filter((c) => !seen.has(c.rank + c.suit));
+    for (let a = 0; a < deck.length; a++)
+      for (let b = a + 1; b < deck.length; b++) expect(score7([deck[a], deck[b], ...board])).toBeLessThan(heroScore);
   });
 });

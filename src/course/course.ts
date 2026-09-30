@@ -1,5 +1,6 @@
 import { POSTFLOP_UNIT, TOURNAMENT_UNIT } from "./advanced";
 import { ADVANCED_UNITS } from "./expert";
+import { MASTERY_UNITS } from "./mastery";
 import type { Exercise, Unit } from "./types";
 
 const RANKING_ORDER = [
@@ -1339,6 +1340,7 @@ export const COURSE: Unit[] = [
   },
   TOURNAMENT_UNIT,
   ...ADVANCED_UNITS,
+  ...MASTERY_UNITS,
 ];
 
 export interface Section {
@@ -1348,7 +1350,7 @@ export interface Section {
   unitIds: string[];
 }
 
-/** The course in three stages; units appear in COURSE in this order. */
+/** The course in four stages; units appear in COURSE in this order. */
 export const SECTIONS: Section[] = [
   {
     id: "foundations",
@@ -1367,6 +1369,12 @@ export const SECTIONS: Section[] = [
     title: "Advanced",
     description: "What strong regulars know: 3-bets, ranges, sizing, exploits, ICM and the mental game.",
     unitIds: ["facing", "math", "reading", "postflop2", "exploit", "mtt", "mindset"],
+  },
+  {
+    id: "mastery",
+    title: "Mastery",
+    description: "Stack depth, big pots, river decisions, the leaks that cost the most, and full hands.",
+    unitIds: ["spr", "bigpots", "river", "leaks", "handlab"],
   },
 ];
 
