@@ -16,7 +16,8 @@ export type Skill =
   | "preflop"
   | "equity"
   | "callFold"
-  | "combos";
+  | "combos"
+  | "pushFold";
 
 /** Pick one answer from a list. Used for trivia, hand reading, and fold/call/raise decisions. */
 export interface ChoiceExercise {

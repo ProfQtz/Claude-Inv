@@ -1,6 +1,7 @@
 import { Card, cardCode, fullDeck, parseCards, RANK_NAME, RANKS, shuffle, SUIT_SYMBOL } from "../poker/cards";
 import { CATEGORY_NAME, compareHands, describeHand, evaluate, HandCategory, type HandValue, score7 } from "../poker/evaluator";
 import { exactEquity } from "../poker/equity";
+import { recommend, type Seat, solvePushFold } from "../poker/nash";
 import { handLabel, OPENING_RANGES, OPENING_SETS, type Position, POSITIONS, rangePercent } from "../poker/ranges";
 import { formatPercent, hitProbability, potOdds, ruleOf2And4 } from "../poker/math";
 import type { ChoiceExercise, CompareExercise, Exercise, Skill } from "./types";
@@ -346,6 +347,49 @@ export function randomCombos(random: Random = Math.random): ChoiceExercise {
   };
 }
 
+/** Stacks the push/fold drill deals; the solver runs once per stack and is cached. */
+export const PUSH_FOLD_STACKS = [3, 5, 7, 10, 12, 15, 20];
+
+/**
+ * Heads-up push/fold spot graded by the Nash solver. Only clear spots are dealt: the
+ * equilibrium plays the hand purely and the EV gap to the other action is at least 0.05 BB.
+ */
+export function randomPushFold(random: Random = Math.random): ChoiceExercise {
+  const stack = pick(PUSH_FOLD_STACKS, random);
+  const seat: Seat = random() < 0.5 ? "SB" : "BB";
+  const solution = solvePushFold(stack);
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const hand = shuffle(fullDeck(), random).slice(0, 2);
+    const rec = recommend(solution, handLabel(hand[0], hand[1]), seat);
+    const pure = rec.frequency === 0 || rec.frequency === 1;
+    if (!pure || Math.abs(rec.margin) < 0.05) continue;
+
+    const go = rec.frequency === 1;
+    const verb = seat === "SB" ? "Shove" : "Call";
+    const edge = `${Math.abs(rec.margin).toFixed(2)} BB`;
+    return {
+      type: "choice",
+      prompt:
+        seat === "SB"
+          ? `Heads-up with ${stack} BB. You're in the small blind. Shove or fold?`
+          : `Heads-up with ${stack} BB. The small blind shoves. Call or fold?`,
+      hand: codes(hand),
+      info: [
+        { label: "Seat", value: seat === "SB" ? "Small blind" : "Big blind" },
+        { label: "Effective stack", value: `${stack} BB` },
+      ],
+      options: ["Fold", verb],
+      answer: go ? 1 : 0,
+      explanation:
+        `At the Nash equilibrium for ${stack} BB, ${rec.hand} ${go ? (seat === "SB" ? "shoves" : "calls") : "folds"}: ` +
+        `${go ? verb.toLowerCase() + "ing" : "folding"} is worth ${edge} more. ` +
+        `The small blind shoves ${Math.round(solution.pushPercent * 100)}% of hands and the big blind calls ${Math.round(solution.callPercent * 100)}%.`,
+      skill: "pushFold",
+    };
+  }
+  throw new Error("Could not deal a clear push/fold spot");
+}
+
 const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   showdown: randomCompare,
   handName: randomHandName,
@@ -356,6 +400,7 @@ const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   equity: randomEquity,
   callFold: randomCallFold,
   combos: randomCombos,
+  pushFold: randomPushFold,
 };
 
 export const SKILLS = Object.keys(MAKERS) as Skill[];

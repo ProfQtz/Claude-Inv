@@ -29,6 +29,7 @@ import {
   Scale,
   Blocks,
   SlidersHorizontal,
+  Cpu,
 } from "lucide-react";
 
 /** Icons referenced by name from course data, drills and achievements. */
@@ -62,6 +63,7 @@ export const ICONS: Record<string, LucideIcon> = {
   scale: Scale,
   blocks: Blocks,
   sliders: SlidersHorizontal,
+  cpu: Cpu,
 };
 
 export function NamedIcon({ name, size = 20, strokeWidth = 2 }: { name: string; size?: number; strokeWidth?: number }) {

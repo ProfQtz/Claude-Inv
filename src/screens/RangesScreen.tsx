@@ -1,5 +1,7 @@
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Cpu } from "lucide-react";
+import { type CSSProperties, useMemo, useState } from "react";
+import { rangeEquity, recommend, type Seat, solvePushFold } from "../poker/nash";
+import { CLASS_INDEX } from "../poker/preflop";
 import {
   CHART_RANKS,
   chartLabel,
@@ -11,25 +13,60 @@ import {
   rangePercent,
 } from "../poker/ranges";
 
-export function RangesScreen({ onBack }: { onBack: () => void }) {
+type ChartTab = "opening" | "pushfold";
+
+/** 13×13 hand grid; `freq` gives each label's action frequency (0..1) for shading. */
+function HandGrid(props: {
+  ariaLabel: string;
+  freq: (label: string) => number;
+  selected: string | null;
+  onSelect: (label: string) => void;
+}) {
+  return (
+    <div className="range-grid-wrap">
+      <div className="range-grid" role="grid" aria-label={props.ariaLabel}>
+        {CHART_RANKS.map((_, row) => (
+          <div key={row} role="row" className="range-row">
+            {CHART_RANKS.map((__, col) => {
+              const label = chartLabel(row, col);
+              const kind = row === col ? "pair" : row < col ? "suited" : "offsuit";
+              const f = props.freq(label);
+              const state = f >= 1 ? "open" : f > 0 ? `mixed ${f >= 0.5 ? "hi" : ""}` : "";
+              return (
+                <button
+                  key={col}
+                  role="gridcell"
+                  aria-label={`${label}: ${Math.round(f * 100)}%`}
+                  className={`range-cell ${kind} ${state} ${props.selected === label ? "focus" : ""}`}
+                  style={{ "--freq": `${f * 100}%` } as CSSProperties}
+                  onMouseEnter={() => props.onSelect(label)}
+                  onFocus={() => props.onSelect(label)}
+                  onClick={() => props.onSelect(label)}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OpeningCharts() {
   const [position, setPosition] = useState<Position>("BTN");
   const [hover, setHover] = useState<string | null>(null);
   const range = OPENING_SETS[position];
   const name = POSITIONS.find((p) => p.id === position)!.name;
 
   return (
-    <div className="page ranges">
-      <button className="btn btn-ghost back" onClick={onBack}>
-        <ArrowLeft size={18} aria-hidden="true" /> Practice
-      </button>
-      <header className="page-head">
-        <h1>Opening ranges</h1>
-        <p>
-          Which hands to raise when everyone folds to you, at a 6-max table with 100 BB stacks. These are simplified
-          charts: easy to memorize and close to what strong players use.
-        </p>
-      </header>
-
+    <>
+      <p className="chart-intro">
+        Which hands to raise when everyone folds to you, at a 6-max table with 100 BB stacks. These are simplified,
+        pure-raise charts written for PokerLingo, not solver output: easy to memorize and close to what strong players
+        use.
+      </p>
       <div className="segmented wide" role="tablist" aria-label="Position">
         {POSITIONS.map((p) => (
           <button
@@ -54,32 +91,12 @@ export function RangesScreen({ onBack }: { onBack: () => void }) {
         </span>
       </div>
 
-      <div className="range-grid-wrap">
-        <div className="range-grid" role="grid" aria-label={`${name} opening range`}>
-          {CHART_RANKS.map((_, row) => (
-            <div key={row} role="row" className="range-row">
-              {CHART_RANKS.map((__, col) => {
-                const label = chartLabel(row, col);
-                const kind = row === col ? "pair" : row < col ? "suited" : "offsuit";
-                const open = range.has(label);
-                return (
-                  <button
-                    key={col}
-                    role="gridcell"
-                    aria-label={`${label}: ${open ? "raise" : "fold"}`}
-                    className={`range-cell ${kind} ${open ? "open" : ""} ${hover === label ? "focus" : ""}`}
-                    onMouseEnter={() => setHover(label)}
-                    onFocus={() => setHover(label)}
-                    onClick={() => setHover(label)}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
+      <HandGrid
+        ariaLabel={`${name} opening range`}
+        freq={(l) => (range.has(l) ? 1 : 0)}
+        selected={hover}
+        onSelect={setHover}
+      />
 
       <div className="range-legend">
         <span>
@@ -95,6 +112,158 @@ export function RangesScreen({ onBack }: { onBack: () => void }) {
         <span className="eyebrow">Shorthand</span>
         <code>{OPENING_RANGES[position]}</code>
       </p>
+    </>
+  );
+}
+
+const ANTES = [
+  { value: 0, label: "No ante" },
+  { value: 0.125, label: "Ante 12.5%" },
+];
+
+function formatBB(v: number) {
+  return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)} BB`;
+}
+
+function PushFoldCharts() {
+  const [stack, setStack] = useState(10);
+  const [ante, setAnte] = useState(0);
+  const [seat, setSeat] = useState<Seat>("SB");
+  const [selected, setSelected] = useState<string | null>("K7o");
+
+  const solution = useMemo(() => solvePushFold(stack, ante), [stack, ante]);
+  const freqs = seat === "SB" ? solution.push : solution.call;
+  const rec = selected ? recommend(solution, selected, seat) : null;
+  // Equity when the chips go in: hero's class against the other seat's continuing range.
+  const allInEquity = selected ? rangeEquity(selected, seat === "SB" ? solution.call : solution.push) : null;
+
+  return (
+    <>
+      <p className="chart-intro">
+        Heads-up, the small blind either shoves all-in or folds, and the big blind calls or folds. At short stacks this is
+        the whole game, so PokerLingo solves it exactly: a Nash equilibrium computed live in your browser from a
+        precomputed all-in equity table for all 169 × 169 hand matchups.
+      </p>
+
+      <div className="solver-controls">
+        <label className="stack-control" htmlFor="stack-slider">
+          <span className="eyebrow">Effective stack</span>
+          <strong className="num">{stack} BB</strong>
+          <input
+            id="stack-slider"
+            type="range"
+            min={1}
+            max={25}
+            step={1}
+            value={stack}
+            onChange={(e) => setStack(Number(e.target.value))}
+          />
+        </label>
+        <div className="solver-toggles">
+          <div className="segmented" role="radiogroup" aria-label="Seat">
+            {(["SB", "BB"] as const).map((s) => (
+              <button key={s} role="radio" aria-checked={seat === s} className={seat === s ? "on" : ""} onClick={() => setSeat(s)}>
+                {s === "SB" ? "SB shoves" : "BB calls"}
+              </button>
+            ))}
+          </div>
+          <div className="segmented" role="radiogroup" aria-label="Ante">
+            {ANTES.map((a) => (
+              <button
+                key={a.value}
+                role="radio"
+                aria-checked={ante === a.value}
+                className={ante === a.value ? "on" : ""}
+                onClick={() => setAnte(a.value)}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="solver-summary">
+        <div>
+          <span className="eyebrow">Small blind shoves</span>
+          <strong className="num">{Math.round(solution.pushPercent * 100)}%</strong>
+        </div>
+        <div>
+          <span className="eyebrow">Big blind calls</span>
+          <strong className="num">{Math.round(solution.callPercent * 100)}%</strong>
+        </div>
+      </div>
+
+      <HandGrid
+        ariaLabel={seat === "SB" ? `Small blind shoving range at ${stack} BB` : `Big blind calling range at ${stack} BB`}
+        freq={(l) => freqs[CLASS_INDEX.get(l)!]}
+        selected={selected}
+        onSelect={setSelected}
+      />
+
+      <div className="range-legend">
+        <span>
+          <i className="swatch open" /> {seat === "SB" ? "Shove" : "Call"}
+        </span>
+        <span>
+          <i className="swatch mixed" /> Mixed
+        </span>
+        <span>
+          <i className="swatch fold" /> Fold
+        </span>
+      </div>
+
+      {rec && (
+        <section className="solver-card" aria-live="polite">
+          <span className="icon-tile brand">
+            <Cpu size={18} aria-hidden="true" />
+          </span>
+          <div>
+            <span className="eyebrow">Solver recommendation</span>
+            <strong>
+              {rec.hand} in the {seat === "SB" ? "small blind" : "big blind"} at {stack} BB:{" "}
+              <span className={rec.action === "Fold" ? "rec-fold" : "rec-go"}>
+                {rec.frequency > 0 && rec.frequency < 1
+                  ? `${rec.action === "Fold" ? (seat === "SB" ? "Shove" : "Call") : rec.action} ${Math.round(rec.frequency * 100)}% of the time`
+                  : rec.action}
+              </span>
+            </strong>
+            <p>
+              {seat === "SB" ? "Shoving" : "Calling"} is worth {formatBB(rec.margin)} compared with folding
+              {allInEquity !== null && (
+                <>
+                  . When the chips go in, {rec.hand} has {Math.round(allInEquity * 100)}% equity against the{" "}
+                  {seat === "SB" ? "big blind's calling" : "small blind's shoving"} range
+                </>
+              )}
+              .
+            </p>
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+export function RangesScreen({ onBack }: { onBack: () => void }) {
+  const [tab, setTab] = useState<ChartTab>("pushfold");
+  return (
+    <div className="page ranges">
+      <button className="btn btn-ghost back" onClick={onBack}>
+        <ArrowLeft size={18} aria-hidden="true" /> Practice
+      </button>
+      <header className="page-head">
+        <h1>Strategy charts</h1>
+      </header>
+      <div className="tabs" role="tablist" aria-label="Chart type">
+        <button role="tab" aria-selected={tab === "pushfold"} className={tab === "pushfold" ? "on" : ""} onClick={() => setTab("pushfold")}>
+          Push/fold solver
+        </button>
+        <button role="tab" aria-selected={tab === "opening"} className={tab === "opening" ? "on" : ""} onClick={() => setTab("opening")}>
+          Opening ranges
+        </button>
+      </div>
+      {tab === "pushfold" ? <PushFoldCharts /> : <OpeningCharts />}
     </div>
   );
 }

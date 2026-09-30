@@ -71,6 +71,12 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
     icon: "scale",
     color: "#2f8f5b",
   },
+  pushFold: {
+    title: "Push or Fold",
+    description: "Short-stack shoves and calls, graded by a Nash solver.",
+    icon: "cpu",
+    color: "#1f6f8b",
+  },
   combos: {
     title: "Combos & Blockers",
     description: "Count the hands villain can still hold.",
@@ -88,6 +94,7 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
 /** Skills in the order they appear on the Practice tab: preflop to river to math. */
 export const SKILL_ORDER: Skill[] = [
   "preflop",
+  "pushFold",
   "showdown",
   "handName",
   "nuts",
@@ -305,8 +312,8 @@ export function PracticeScreen(props: Props) {
           <span className="icon-tile brand">
             <NamedIcon name="grid" size={20} />
           </span>
-          <strong>Opening ranges</strong>
-          <span>Chart for every seat</span>
+          <strong>Strategy charts</strong>
+          <span>Push/fold solver and opening ranges</span>
         </button>
         <button className="tool-card" onClick={() => setMixerOpen(true)}>
           <span className="icon-tile blue">

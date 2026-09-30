@@ -22,7 +22,11 @@ path, hearts, XP, streaks, gems and endless practice drills.
   you" drill and Bronze/Silver/Gold mastery badges; drills can be 5, 10 or 20
   questions, you can build your own mix of skills, and recent sessions are listed.
 - **Daily Challenge** — the same ten hands for everyone each day, for bonus gems.
-- **Opening ranges** — a 13×13 chart of simplified 6-max opening ranges per seat.
+- **Strategy charts** — a heads-up push/fold Nash equilibrium solved live in the
+  browser for any stack from 1 to 25 BB (with or without antes), shown as 13×13
+  charts with mixed strategies and a solver recommendation for every hand; plus
+  simplified 6-max opening ranges per seat. A "Push or Fold" drill is graded by
+  the solver.
 - **Speed Round** — 60 seconds of quick reads with a saved personal best.
 - **Mistakes review** — questions missed in lessons and hands missed in drills are
   queued for review and cleared once answered correctly.
@@ -39,7 +43,13 @@ npm install
 npm run dev        # start the dev server
 npm test           # unit tests (evaluator, poker math, course content, progress)
 npm run build      # typecheck + production build
+npm run build:equity  # regenerate the preflop equity table (a few minutes)
 ```
+
+The push/fold solver reads `src/poker/preflopEquity.ts`, a generated table of all-in
+equity for every pair of the 169 starting-hand classes (10,000 sampled deals each,
+with card removal between specific combos). The solver runs fictitious play over
+that table, which converges to the Nash equilibrium of the heads-up push/fold game.
 
 ## Layout
 
