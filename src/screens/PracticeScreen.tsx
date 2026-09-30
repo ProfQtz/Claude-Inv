@@ -89,6 +89,18 @@ export const DRILL_INFO: Record<DrillKind, DrillInfo> = {
     icon: "cpu",
     color: "#1f6f8b",
   },
+  bluffCatch: {
+    title: "Bluff-Catching",
+    description: "Count villain's value and bluffs on the river, then call or fold.",
+    icon: "scan-eye",
+    color: "#7c3aed",
+  },
+  rangeEdge: {
+    title: "Range Advantage",
+    description: "Which flop favours the preflop raiser?",
+    icon: "radar",
+    color: "#0f766e",
+  },
   combos: {
     title: "Combos & Blockers",
     description: "Count the hands villain can still hold.",
@@ -117,6 +129,8 @@ export const SKILL_ORDER: Skill[] = [
   "potOdds",
   "betMath",
   "callFold",
+  "rangeEdge",
+  "bluffCatch",
 ];
 
 export const DRILL_TITLES: Record<DrillKind, string> = Object.fromEntries(

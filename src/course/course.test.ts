@@ -13,13 +13,18 @@ import {
   findNuts,
   generateDrill,
   generateExercise,
+  EDGE_GAP,
+  RIVER_MARGIN,
   resolveCompare,
+  seededRandom,
   sectionTest,
   SKILLS,
 } from "./generator";
 import { exactEquity } from "../poker/equity";
-import { FACING_SPOTS, facingAction, handLabel, OPENING_SETS, POSITIONS } from "../poker/ranges";
-import { describeHand, HandCategory } from "../poker/evaluator";
+import { FACING_SETS, FACING_SPOTS, facingAction, handLabel, OPENING_SETS, POSITIONS } from "../poker/ranges";
+import { describeHand, HandCategory, score7, scoreCategory } from "../poker/evaluator";
+import { flopDraw, rangeCombos, rangeVsRangeEquity, riverRange } from "../poker/rangeTools";
+import { FLOP_SPOTS } from "../poker/flops";
 import type { Exercise } from "./types";
 
 const allExercises = COURSE.flatMap((u) => u.lessons.flatMap((l) => l.exercises.map((e) => ({ id: l.id, e }))));
@@ -110,7 +115,7 @@ describe("drill generator", () => {
   let seed = 42;
   const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
 
-  it.each(["showdown", "handName", "potOdds", "outs", "nuts", "preflop", "callFold", "combos", "betMath", "vsOpen", "mixed"] as const)(
+  it.each(["showdown", "handName", "potOdds", "outs", "nuts", "preflop", "callFold", "combos", "betMath", "vsOpen", "bluffCatch", "rangeEdge", "mixed"] as const)(
     "generates valid %s drills",
     (kind) => {
       for (let i = 0; i < 25; i++) generateDrill(kind, 6, random).forEach(checkExercise);
@@ -380,5 +385,75 @@ describe("section tests", () => {
     for (const id of units) expect(before).toContain(id);
     expect(units.size).toBeGreaterThanOrEqual(8);
     for (const e of test) expect(["choice", "compare", "order"]).toContain(e.type);
+  });
+});
+
+describe("river bluff-catching drill", () => {
+  const drills = Array.from({ length: 80 }, (_, i) => generateExercise("bluffCatch", seededRandom(`river-${i}`)));
+
+  it("grades by bluffs ÷ all combos against the price, clear of the line", () => {
+    for (const e of drills) {
+      if (e.type !== "choice") throw new Error("expected choice");
+      const hero = parseCards(e.hand!);
+      const board = parseCards(e.board!);
+      const position = POSITIONS.find((p) => p.name === e.info![0].value)!.id;
+      const read = riverRange(OPENING_SETS[position], board, hero);
+      const [pot, bet] = [1, 2].map((i) => Number(e.info![i].value.slice(1)));
+      const equity = read.bluffTotal / (read.valueTotal + read.bluffTotal);
+      const need = potOdds(pot + bet, bet);
+      expect(Math.abs(equity - need)).toBeGreaterThanOrEqual(RIVER_MARGIN);
+      expect(e.options[e.answer]).toBe(equity > need ? "Call" : "Fold");
+      expect(e.explanation).toContain(`${read.bluffTotal} ÷ ${read.valueTotal + read.bluffTotal}`);
+    }
+  });
+
+  it("gives hero a pair that loses to every value hand and beats every bluff", () => {
+    for (const e of drills) {
+      if (e.type !== "choice") throw new Error("expected choice");
+      const hero = parseCards(e.hand!);
+      const board = parseCards(e.board!);
+      const position = POSITIONS.find((p) => p.name === e.info![0].value)!.id;
+      const heroScore = score7([...hero, ...board]);
+      expect(scoreCategory(heroScore)).toBe(HandCategory.OnePair);
+      // Hero's hand is one that calls the open in this spot.
+      const spot = FLOP_SPOTS.find((s) => s.raiser === position)!;
+      expect(FACING_SETS[spot.facing].call.has(handLabel(hero[0], hero[1]))).toBe(true);
+      for (const combo of rangeCombos(OPENING_SETS[position], [...board, ...hero])) {
+        const score = score7([...combo, ...board]);
+        const category = scoreCategory(score);
+        if (category >= HandCategory.TwoPair) expect(score).toBeGreaterThan(heroScore);
+        else if (category === HandCategory.HighCard && flopDraw(combo, board.slice(0, 3))) expect(score).toBeLessThan(heroScore);
+      }
+    }
+  });
+
+  it("deals calls and folds in similar numbers", () => {
+    const calls = drills.filter((e) => e.type === "choice" && e.answer === 1).length;
+    expect(calls).toBeGreaterThan(drills.length * 0.3);
+    expect(calls).toBeLessThan(drills.length * 0.7);
+  });
+});
+
+describe("range advantage drill", () => {
+  it("picks the flop where the raiser's equity is clearly higher", () => {
+    for (let i = 0; i < 12; i++) {
+      const e = generateExercise("rangeEdge", seededRandom(`edge-${i}`));
+      if (e.type !== "choice") throw new Error("expected choice");
+      expect(e.cardOptions).toBe(true);
+      const spot = FLOP_SPOTS.find((s) => e.prompt.startsWith(s.text))!;
+      const flops = e.options.map(parseCards);
+      expect(new Set(e.options.join(" ").split(" ")).size).toBe(6);
+      // Re-measure independently by sampling: the answer must still win by a margin.
+      const equities = flops.map((flop, k) =>
+        rangeVsRangeEquity(
+          rangeCombos(OPENING_SETS[spot.raiser], flop),
+          rangeCombos(FACING_SETS[spot.facing].call, flop),
+          flop,
+          20000,
+          seededRandom(`check-${i}-${k}`),
+        ),
+      );
+      expect(equities[e.answer] - equities[1 - e.answer]).toBeGreaterThan(EDGE_GAP / 2);
+    }
   });
 });

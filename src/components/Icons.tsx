@@ -37,6 +37,18 @@ import {
   Users,
   Crown,
   Lightbulb,
+  ScanEye,
+  Radar,
+  Ruler,
+  GitFork,
+  Binoculars,
+  Bug,
+  FlaskConical,
+  ChartSpline,
+  ListChecks,
+  BadgeCheck,
+  Route,
+  Microscope,
 } from "lucide-react";
 
 /** Icons referenced by name from course data, drills and achievements. */
@@ -78,6 +90,18 @@ export const ICONS: Record<string, LucideIcon> = {
   users: Users,
   crown: Crown,
   lightbulb: Lightbulb,
+  "scan-eye": ScanEye,
+  radar: Radar,
+  ruler: Ruler,
+  "git-fork": GitFork,
+  binoculars: Binoculars,
+  bug: Bug,
+  flask: FlaskConical,
+  "chart-spline": ChartSpline,
+  "list-checks": ListChecks,
+  "badge-check": BadgeCheck,
+  route: Route,
+  microscope: Microscope,
 };
 
 export function NamedIcon({ name, size = 20, strokeWidth = 2 }: { name: string; size?: number; strokeWidth?: number }) {

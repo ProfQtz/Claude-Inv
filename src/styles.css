@@ -3711,3 +3711,38 @@ p {
   margin-top: 6px;
   word-break: break-word;
 }
+
+/* ---------- Small cards (card-list answer options) ---------- */
+
+.card.sm {
+  width: 34px;
+  height: 48px;
+  border-radius: 5px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.12),
+    0 2px 4px rgb(0 0 0 / 0.18);
+}
+
+.card.sm .card-index {
+  top: 3px;
+  left: 4px;
+}
+
+.card.sm .card-rank {
+  font-size: 0.8rem;
+}
+
+.card.sm .card-pip {
+  font-size: 0.56rem;
+}
+
+.card.sm .card-suit {
+  margin-top: 10px;
+  margin-left: 7px;
+  font-size: 1.15rem;
+}
+
+.option.card-option .card-row {
+  justify-content: flex-start;
+  gap: 5px;
+}

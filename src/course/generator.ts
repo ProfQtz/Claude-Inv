@@ -1,5 +1,13 @@
-import { Card, cardCode, fullDeck, parseCards, RANK_NAME, RANKS, shuffle, SUIT_SYMBOL } from "../poker/cards";
-import { CATEGORY_NAME, compareHands, describeHand, evaluate, HandCategory, type HandValue, score7 } from "../poker/evaluator";
+import { Card, cardCode, fullDeck, parseCards, prettyCards, RANK_NAME, RANKS, rankValue, shuffle } from "../poker/cards";
+import {
+  CATEGORY_NAME,
+  compareHands,
+  describeHand,
+  evaluate,
+  HandCategory,
+  type HandValue,
+  score7,
+} from "../poker/evaluator";
 import { exactEquity } from "../poker/equity";
 import { recommend, type Seat, solvePushFold } from "../poker/nash";
 import {
@@ -14,13 +22,16 @@ import {
   rangePercent,
 } from "../poker/ranges";
 import { formatPercent, hitProbability, potOdds, ruleOf2And4 } from "../poker/math";
+import { rangeCombos, riverRange, topPairShare } from "../poker/rangeTools";
+import { CANONICAL_FLOPS, FLOP_SPOTS, flopEquities } from "../poker/flopEdge";
+import { randomSuits } from "../poker/flops";
 import { COURSE, SECTIONS } from "./course";
 import type { ChoiceExercise, CompareExercise, Exercise, Skill } from "./types";
 
 type Random = () => number;
 
 const codes = (cards: Card[]) => cards.map(cardCode).join(" ");
-const pretty = (cards: Card[]) => cards.map((c) => (c.rank === "T" ? "10" : c.rank) + SUIT_SYMBOL[c.suit]).join(" ");
+const pretty = (cards: Card[]) => prettyCards(codes(cards));
 const ALL_CATEGORIES = Object.values(HandCategory).filter((v): v is HandCategory => typeof v === "number");
 
 /** Right category plus its neighbours on the ladder, so the choice is non-trivial. */
@@ -561,6 +572,155 @@ export function randomVsOpen(random: Random = Math.random): ChoiceExercise {
   };
 }
 
+const RIVER_POTS = [40, 60, 80, 100, 120, 150, 200];
+const RIVER_BETS = [0.5, 2 / 3, 0.75, 1, 1.5];
+
+const VALUE_NAMES: [HandCategory, string, string][] = [
+  [HandCategory.StraightFlush, "straight flush", "straight flushes"],
+  [HandCategory.Flush, "flush", "flushes"],
+  [HandCategory.Straight, "straight", "straights"],
+  [HandCategory.ThreeOfAKind, "set", "sets"],
+  [HandCategory.TwoPair, "two pair", "two pair"],
+];
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The minimum gap between equity and price for a river call to be dealt. */
+export const RIVER_MARGIN = 0.06;
+
+/**
+ * River bluff-catching: villain opened and bets a polarized range on the river (two
+ * pair or better, or a missed flop draw). Hero called preflop with a hand from the
+ * matching calling range and holds one pair, which beats every bluff and loses to
+ * every value hand, so the equity is bluffs ÷ all combos.
+ */
+export function randomBluffCatch(random: Random = Math.random): ChoiceExercise {
+  const wantCall = random() < 0.5;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const spot = pick(FLOP_SPOTS, random);
+    const board = shuffle(fullDeck(), random).slice(0, 5);
+    const boardRanks = board.map((c) => rankValue(c.rank)).sort((a, b) => b - a);
+    if (new Set(boardRanks).size < 5) continue;
+    const hero = pick(rangeCombos(FACING_SETS[spot.facing].call, board), random);
+    const heroValue = evaluate([...hero, ...board]);
+    if (heroValue.category !== HandCategory.OnePair) continue;
+    // A pair worth calling with: an overpair, top pair or second pair.
+    if (heroValue.kickers[0] < boardRanks[1]) continue;
+
+    const position = spot.raiser;
+    const range = OPENING_SETS[position];
+    const read = riverRange(range, board, hero);
+    if (read.valueTotal === 0 || read.bluffTotal === 0) continue;
+    const pot = pick(RIVER_POTS, random);
+    const bet = Math.round(pot * pick(RIVER_BETS, random));
+    const need = potOdds(pot + bet, bet);
+    const total = read.valueTotal + read.bluffTotal;
+    const equity = read.bluffTotal / total;
+    if (Math.abs(equity - need) < RIVER_MARGIN) continue;
+    const call = equity > need;
+    if (attempt < 300 && call !== wantCall) continue;
+
+    const valueParts = VALUE_NAMES.filter(([c]) => read.value[c]).map(([c, one, many]) => count(read.value[c]!, one, many));
+    const bluffParts = [
+      read.bluffs.flush && count(read.bluffs.flush, "missed flush draw", "missed flush draws"),
+      read.bluffs.straight && count(read.bluffs.straight, "missed straight draw", "missed straight draws"),
+    ].filter(Boolean);
+    const open = riverRange(range, board);
+    const blocked = [
+      open.valueTotal > read.valueTotal && count(open.valueTotal - read.valueTotal, "value combo", "value combos"),
+      open.bluffTotal > read.bluffTotal && count(open.bluffTotal - read.bluffTotal, "bluff", "bluffs"),
+    ].filter(Boolean);
+    const name = POSITIONS.find((p) => p.id === position)!.name;
+
+    return {
+      type: "choice",
+      prompt: "River. Villain bets two pair or better, or a missed draw. Call or fold?",
+      hand: codes(hero),
+      board: codes(board),
+      info: [
+        { label: "Villain opened", value: name },
+        { label: "Pot before bet", value: `$${pot}` },
+        { label: "Villain bets", value: `$${bet}` },
+      ],
+      options: ["Fold", "Call"],
+      answer: call ? 1 : 0,
+      explanation:
+        `Value: ${read.valueTotal} (${valueParts.join(", ")}). Bluffs: ${read.bluffTotal} (${bluffParts.join(", ")}). ` +
+        `Your ${describeHand(heroValue).toLowerCase()} beats only the bluffs: ${read.bluffTotal} ÷ ${total} = ${formatPercent(equity)}. ` +
+        `Calling $${bet} to win $${pot + bet} needs ${formatPercent(need)}, so ${call ? "call" : "fold"}.` +
+        (blocked.length ? ` Your cards block ${blocked.join(" and ")}.` : ""),
+      skill: "bluffCatch",
+    };
+  }
+  throw new Error("Could not deal a river bluff-catch spot");
+}
+
+/** Minimum difference in the raiser's equity between the two flops. */
+export const EDGE_GAP = 0.05;
+
+let flopCumulative: number[] | null = null;
+
+/** A canonical flop index, weighted by how many real flops share its form. */
+function randomFlopIndex(random: Random): number {
+  flopCumulative ??= CANONICAL_FLOPS.reduce<number[]>((acc, f) => [...acc, (acc.at(-1) ?? 0) + f.weight], []);
+  const target = random() * flopCumulative[flopCumulative.length - 1];
+  let lo = 0;
+  let hi = flopCumulative.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (flopCumulative[mid] > target) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+/**
+ * Two flops: on which does the preflop raiser have the bigger edge? Graded by the
+ * precomputed range-vs-range equity table with a clear gap, and only dealt when the
+ * share of top pair or better points the same way.
+ */
+export function randomRangeEdge(random: Random = Math.random): ChoiceExercise {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const spot = pick(FLOP_SPOTS, random);
+    const table = flopEquities(spot.id);
+    const picks = [randomFlopIndex(random), randomFlopIndex(random)];
+    const equities = picks.map((i) => table[i]);
+    if (Math.abs(equities[0] - equities[1]) < EDGE_GAP) continue;
+
+    const flops = picks.map((i) => randomSuits(CANONICAL_FLOPS[i].cards, random));
+    // Relabel the second flop's suits so the two boards never show the same card.
+    const shared = () => flops[1].some((c) => flops[0].some((d) => d.rank === c.rank && d.suit === c.suit));
+    for (let k = 0; k < 24 && shared(); k++) flops[1] = randomSuits(CANONICAL_FLOPS[picks[1]].cards, random);
+    if (shared()) continue;
+    const hits = flops.map((flop) => ({
+      raiser: topPairShare(rangeCombos(OPENING_SETS[spot.raiser], flop), flop),
+      caller: topPairShare(rangeCombos(FACING_SETS[spot.facing].call, flop), flop),
+    }));
+    const best = equities[0] > equities[1] ? 0 : 1;
+    const edge = (i: number) => hits[i].raiser - hits[i].caller;
+    if (edge(best) < edge(1 - best)) continue;
+
+    const line = (i: number) =>
+      `${pretty(flops[i])}: the raiser wins about ${formatPercent(equities[i])} and has top pair or better ${formatPercent(hits[i].raiser)} of the time, vs ${formatPercent(hits[i].caller)} for the caller`;
+    return {
+      type: "choice",
+      prompt: `${spot.text}. On which flop does the raiser have the bigger edge?`,
+      info: [
+        { label: "Raiser", value: POSITIONS.find((p) => p.id === spot.raiser)!.name },
+        { label: "Caller", value: spot.caller },
+      ],
+      options: flops.map(codes),
+      cardOptions: true,
+      answer: best,
+      explanation:
+        `${line(best)}. ${line(1 - best)}. ` +
+        "Flops that hit the raiser's big cards and big pairs let them bet often; flops that hit the caller's pairs and suited connectors call for more checking.",
+      skill: "rangeEdge",
+    };
+  }
+  throw new Error("Could not deal two flops with a clear range edge");
+}
+
 const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   showdown: randomCompare,
   handName: randomHandName,
@@ -574,6 +734,8 @@ const MAKERS: Record<Skill, (random: Random) => Exercise> = {
   pushFold: randomPushFold,
   betMath: randomBetMath,
   vsOpen: randomVsOpen,
+  bluffCatch: randomBluffCatch,
+  rangeEdge: randomRangeEdge,
 };
 
 export const SKILLS = Object.keys(MAKERS) as Skill[];
