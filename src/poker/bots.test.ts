@@ -85,9 +85,14 @@ describe("simulated opponents", () => {
     );
     s = act(act(s, { kind: "call" }), { kind: "check" });
     s.board = parseCards("Ah Kh 7c");
-    const nuts = botPolicy("regular", situation(s), parseCards("As Ad"));
-    expect(nuts.find((c) => c.action.kind === "bet")!.p).toBeGreaterThan(0.5);
+    // First to act without the initiative: mostly check, even with the nuts.
+    const lead = botPolicy("regular", situation(s), parseCards("As Ad"));
+    expect(lead.find((c) => c.action.kind === "check")!.p).toBeGreaterThan(0.5);
     const nit = botPolicy("nit", situation(s), parseCards("4d 2s"));
     expect(nit.find((c) => c.action.kind === "check")!.p).toBeGreaterThan(0.9);
+    // Checked to, last to act: bet the nuts for value.
+    s = act(s, { kind: "check" });
+    const nuts = botPolicy("regular", situation(s), parseCards("As Ad"));
+    expect(nuts.find((c) => c.action.kind === "bet")!.p).toBeGreaterThan(0.5);
   });
 });

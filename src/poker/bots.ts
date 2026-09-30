@@ -101,6 +101,11 @@ interface PostflopStyle {
   bluffRaise: number;
   /** Bet size as a fraction of the pot. */
   size: number;
+  /**
+   * How often to lead out of position without the initiative, relative to betting when
+   * checked to: most players check to the last aggressor with strong hands too.
+   */
+  lead: number;
 }
 
 const POSTFLOP: Record<BotStyle, PostflopStyle> = {
@@ -121,6 +126,7 @@ const POSTFLOP: Record<BotStyle, PostflopStyle> = {
     semiRaise: 0,
     bluffRaise: 0,
     size: 0.6,
+    lead: 0.3,
   },
   station: {
     value: { flop: 0.93, turn: 0.92, river: 0.9 },
@@ -139,6 +145,7 @@ const POSTFLOP: Record<BotStyle, PostflopStyle> = {
     semiRaise: 0,
     bluffRaise: 0,
     size: 0.5,
+    lead: 0.5,
   },
   maniac: {
     value: { flop: 0.8, turn: 0.76, river: 0.7 },
@@ -157,6 +164,7 @@ const POSTFLOP: Record<BotStyle, PostflopStyle> = {
     semiRaise: 0.35,
     bluffRaise: 0.15,
     size: 0.85,
+    lead: 0.7,
   },
   regular: {
     value: { flop: 0.88, turn: 0.86, river: 0.8 },
@@ -175,6 +183,7 @@ const POSTFLOP: Record<BotStyle, PostflopStyle> = {
     semiRaise: 0.15,
     bluffRaise: 0.03,
     size: 0.66,
+    lead: 0.2,
   },
 };
 
@@ -285,11 +294,13 @@ function postflopPolicy(style: BotStyle, sit: Situation, hole: Card[]): BotChoic
   const betTo = sit.ownBet + sit.pot * P.size;
 
   if (sit.toCall === 0) {
-    if (hs >= P.value[street]) return mix(sit, P.valueFreq, betTo, "value", CHECK);
-    if (draw) return mix(sit, P.semiBluff / crowd, betTo, "value", CHECK);
-    if (hs >= P.thin[street]) return mix(sit, P.thinFreq, betTo, "value", CHECK);
+    // First to act without the initiative: mostly check to the aggressor.
+    const lead = !sit.aggressor && !sit.lastToAct ? P.lead : 1;
+    if (hs >= P.value[street]) return mix(sit, P.valueFreq * lead, betTo, "value", CHECK);
+    if (draw) return mix(sit, (P.semiBluff * lead) / crowd, betTo, "value", CHECK);
+    if (hs >= P.thin[street]) return mix(sit, P.thinFreq * lead, betTo, "value", CHECK);
     if (hs < P.air[street]) {
-      const bluff = (sit.aggressor ? P.barrel[street] : P.stab) / crowd;
+      const bluff = (sit.aggressor ? P.barrel[street] : P.stab * lead) / crowd;
       return mix(sit, bluff, betTo, "value", CHECK);
     }
     return [choice(CHECK, 1)];

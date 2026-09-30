@@ -2,7 +2,8 @@ import { botPolicy, STYLE_INFO } from "./bots";
 import { type Card, cardCode, fullDeck } from "./cards";
 import { score7 } from "./evaluator";
 import { classCombos, HAND_CLASSES } from "./preflop";
-import { facingAction, handLabel, OPENING_SETS, type Position, rangePercent } from "./ranges";
+import type { ChoiceExercise } from "../course/types";
+import { facingAction, handLabel, OPENING_SETS, type Position, POSITIONS, rangePercent } from "./ranges";
 import { type ActionRecord, type BotStyle, formatBB, type HandState, type Situation, type TableStreet } from "./table";
 
 type Random = () => number;
@@ -111,6 +112,7 @@ export function equityVsRanges(hero: Card[], board: Card[], ranges: WeightedComb
 }
 
 export type Verdict = "good" | "close" | "mistake" | "info";
+export type DecisionKind = "preflop" | "call" | "fold" | "raise" | "bet" | "check";
 
 export interface DecisionCheck {
   street: TableStreet;
@@ -119,10 +121,22 @@ export interface DecisionCheck {
   title: string;
   verdict: Verdict;
   detail: string;
+  kind: DecisionKind;
+  /** Styles of the opponents still in the hand; empty for preflop chart checks. */
+  styles: BotStyle[];
+  /** For mistakes: the spot as a review question. */
+  exercise?: ChoiceExercise;
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const STREET_NAME: Record<TableStreet, string> = { preflop: "Preflop", flop: "Flop", turn: "Turn", river: "River" };
+const codes = (cards: Card[]) => cards.map(cardCode).join(" ");
+const FROM_TABLE = "From your practice table.";
+const POSITION_NAME: Record<string, string> = {
+  ...Object.fromEntries(POSITIONS.map((p) => [p.id, p.name])),
+  BTN: "Button",
+  BB: "Big Blind",
+};
 
 const FACING_CHART: Record<string, string> = {
   "BTN<UTG": "btn-vs-utg",
@@ -152,6 +166,7 @@ function preflopCheck(a: ActionRecord, hole: Card[], index: number): DecisionChe
   if (sit.players !== 6 || sit.street !== "preflop") return null;
   const label = handLabel(hole[0], hole[1]);
   const title = `Preflop: you ${describe(a)} with ${label}`;
+  const position = POSITION_NAME[sit.position] ?? sit.position;
 
   if (sit.raises === 0 && sit.limpers === 0 && sit.toCall > 0) {
     const chart = OPENING_SETS[sit.position as Position];
@@ -159,15 +174,32 @@ function preflopCheck(a: ActionRecord, hole: Card[], index: number): DecisionChe
     const open = chart.has(label);
     const good = open ? a.kind === "raise" : a.kind === "fold";
     const range = `the ${sit.position} opening range (${Math.round(rangePercent(chart) * 100)}% of hands)`;
+    const detail =
+      a.kind === "call"
+        ? `Limping gives up the initiative. ${label} is ${open ? "in" : "outside"} ${range}: ${open ? "raise" : "fold"} it.`
+        : `${label} is ${open ? "in" : "outside"} ${range}, so the chart ${open ? "raises" : "folds"}.`;
     return {
       street: "preflop",
       index,
       title,
       verdict: good ? "good" : "mistake",
-      detail:
-        a.kind === "call"
-          ? `Limping gives up the initiative. ${label} is ${open ? "in" : "outside"} ${range}: ${open ? "raise" : "fold"} it.`
-          : `${label} is ${open ? "in" : "outside"} ${range}, so the chart ${open ? "raises" : "folds"}.`,
+      detail,
+      kind: "preflop",
+      styles: [],
+      exercise: good
+        ? undefined
+        : {
+            type: "choice",
+            prompt: "Everyone folds to you. Open-raise or fold?",
+            hand: codes(hole),
+            info: [
+              { label: "Position", value: position },
+              { label: "Table", value: "6-max, 100 BB" },
+            ],
+            options: ["Fold", "Raise"],
+            answer: open ? 1 : 0,
+            explanation: `${FROM_TABLE} ${detail}`,
+          },
     };
   }
 
@@ -176,12 +208,31 @@ function preflopCheck(a: ActionRecord, hole: Card[], index: number): DecisionChe
     if (!spot) return null;
     const chart = facingAction(spot, label);
     const mine = a.kind === "raise" ? "3-bet" : a.kind === "call" ? "Call" : "Fold";
+    const good = mine === chart;
+    const detail = `Facing a ${sit.raiserPosition} open from the ${sit.position}, the chart says ${chart.toLowerCase()} with ${label}.`;
+    const options = ["Fold", "Call", "3-bet"];
     return {
       street: "preflop",
       index,
       title,
-      verdict: mine === chart ? "good" : "mistake",
-      detail: `Facing a ${sit.raiserPosition} open from the ${sit.position}, the chart says ${chart.toLowerCase()} with ${label}.`,
+      verdict: good ? "good" : "mistake",
+      detail,
+      kind: "preflop",
+      styles: [],
+      exercise: good
+        ? undefined
+        : {
+            type: "choice",
+            prompt: `${POSITION_NAME[sit.raiserPosition!] ?? sit.raiserPosition} raises. Your move?`,
+            hand: codes(hole),
+            info: [
+              { label: "Position", value: position },
+              { label: "Action", value: `${sit.raiserPosition} raised to ${formatBB(sit.currentBet)}` },
+            ],
+            options,
+            answer: options.indexOf(chart),
+            explanation: `${FROM_TABLE} ${detail}`,
+          },
     };
   }
   return null;
@@ -192,33 +243,38 @@ const liveOpponents = (state: HandState, hero: number, index: number) =>
     i !== hero && !state.log.slice(0, index).some((a) => a.seat === i && a.kind === "fold") ? [i] : [],
   );
 
+const styleOf = (state: HandState, seat: number) => state.seats[seat].style!;
+
 /** "the Maniac's range" heads-up, "your opponents' ranges" multiway. */
 function rangesOf(state: HandState, seats: number[]): string {
   if (seats.length !== 1) return "your opponents' ranges";
-  return `the ${STYLE_INFO[state.seats[seats[0]].style!].name}'s range`;
+  return `the ${STYLE_INFO[styleOf(state, seats[0])].name}'s range`;
 }
 
-/** "the Maniac" for describing reactions. */
-const styleName = (state: HandState, seat: number) => `the ${STYLE_INFO[state.seats[seat].style!].name}`;
+const styleName = (state: HandState, seat: number) => `the ${STYLE_INFO[styleOf(state, seat)].name}`;
+const styleList = (state: HandState, seats: number[]) => seats.map((i) => STYLE_INFO[styleOf(state, i)].name).join(", ");
 
 /** Calls and folds against a bet: equity against the bettors' ranges versus the price. */
 function facingBetCheck(state: HandState, hero: number, a: ActionRecord, index: number, random: Random): DecisionCheck {
   const sit = a.situation;
   const opponents = liveOpponents(state, hero, index);
-  const dead = [...state.seats[hero].hole, ...sit.board];
-  const ranges = opponents.map((i) => inferRange(state.seats[i].style!, i, state.log.slice(0, index), dead));
+  const holeCards = state.seats[hero].hole;
+  const dead = [...holeCards, ...sit.board];
+  const ranges = opponents.map((i) => inferRange(styleOf(state, i), i, state.log.slice(0, index), dead));
   const title = `${STREET_NAME[sit.street]}: you ${describe(a)}`;
+  const kind: DecisionKind = a.kind === "raise" ? "raise" : a.kind === "call" ? "call" : "fold";
+  const styles = opponents.map((i) => styleOf(state, i));
   if (ranges.some((r) => r.length === 0)) {
-    return { street: sit.street, index, title, verdict: "info", detail: "This line couldn't be matched to a range." };
+    return { street: sit.street, index, title, verdict: "info", detail: "This line couldn't be matched to a range.", kind, styles };
   }
-  const equity = equityVsRanges(state.seats[hero].hole, sit.board, ranges, random);
+  const equity = equityVsRanges(holeCards, sit.board, ranges, random);
   const need = sit.toCall / (sit.pot + sit.toCall);
   const margin = equity - need;
   const band = sit.street === "river" ? 0.03 : 0.05;
   const facts = `Calling ${formatBB(sit.toCall)} into ${formatBB(sit.pot)} needed ${pct(need)}. Against ${rangesOf(state, opponents)} for this line you had about ${pct(equity)}.`;
   const later = sit.street === "river" ? "" : " Later bets can change this, so treat close spots as close.";
 
-  if (a.kind === "raise") return { street: sit.street, index, title, verdict: "info", detail: `${facts}${later}` };
+  if (a.kind === "raise") return { street: sit.street, index, title, verdict: "info", detail: `${facts}${later}`, kind, styles };
   const verdict: Verdict = Math.abs(margin) < band ? "close" : (margin > 0) === (a.kind === "call") ? "good" : "mistake";
   const advice =
     verdict === "close"
@@ -230,10 +286,37 @@ function facingBetCheck(state: HandState, hero: number, a: ActionRecord, index: 
         : verdict === "good"
           ? "Folding was right."
           : "This call loses money over time.";
-  return { street: sit.street, index, title, verdict, detail: `${facts} ${advice}${later}` };
+  return {
+    street: sit.street,
+    index,
+    title,
+    verdict,
+    detail: `${facts} ${advice}${later}`,
+    kind,
+    styles,
+    exercise:
+      verdict !== "mistake"
+        ? undefined
+        : {
+            type: "choice",
+            prompt: `${STREET_NAME[sit.street]}. ${opponents.length === 1 ? `${capitalize(styleName(state, opponents[0]))} bets` : "You face a bet"}. Call or fold?`,
+            hand: codes(holeCards),
+            board: codes(sit.board),
+            info: [
+              { label: "Against", value: styleList(state, opponents) },
+              { label: "Pot", value: formatBB(sit.pot) },
+              { label: "To call", value: formatBB(sit.toCall) },
+            ],
+            options: ["Fold", "Call"],
+            answer: margin > 0 ? 1 : 0,
+            explanation: `${FROM_TABLE} ${facts} ${margin > 0 ? "Call." : "Fold."}${later}`,
+          },
+  };
 }
 
-/** The villain's view after hero bets `bet` on the river: built from its own last river situation. */
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** The villain's view after hero bets `bet`: built from its own last situation on this street. */
 function facingHeroBet(villainSit: Situation, bet: number): Situation {
   const toCall = Math.min(bet, villainSit.stack);
   return {
@@ -257,84 +340,122 @@ interface BetOutcome {
   fold: number;
   call: number;
   raise: number;
-  /** Hero's showdown share when called. */
+  /** Hero's share of the pot against the hands that call. */
   winWhenCalled: number;
 }
 
-function betOutcome(style: BotStyle, villainSit: Situation, range: WeightedCombo[], hero: Card[], board: Card[], pot: number, bet: number): BetOutcome {
+/**
+ * Expected result of betting `bet` into `pot`, from the villain's responses under its policy.
+ * On the river showdowns are exact; earlier, equity with cards to come stands in for the
+ * rest of the hand. Against a raise, hero continues only when that beats folding.
+ */
+function betOutcome(
+  style: BotStyle,
+  villainSit: Situation,
+  range: WeightedCombo[],
+  hero: Card[],
+  board: Card[],
+  pot: number,
+  bet: number,
+  random: Random,
+): BetOutcome {
   const sit = facingHeroBet(villainSit, bet);
-  const called = Math.min(bet, villainSit.stack);
-  let [total, ev, fold, call, raise, won] = [0, 0, 0, 0, 0, 0];
+  const finalPot = pot + bet + Math.min(bet, villainSit.stack);
+  const calls: WeightedCombo[] = [];
+  const raises: WeightedCombo[] = [];
+  let [total, fold, call, raise] = [0, 0, 0, 0];
   for (const { combo, weight } of range) {
     const choices = botPolicy(style, sit, combo);
-    const pf = choices.filter((c) => c.action.kind === "fold").reduce((s, c) => s + c.p, 0);
-    const pr = choices.filter((c) => c.action.kind === "raise").reduce((s, c) => s + c.p, 0);
-    const pc = 1 - pf - pr;
-    const share = showdownShare(hero, combo, board);
-    // Folds win the pot; calls go to showdown; against a raise, assume hero folds.
-    ev += weight * (pf * pot + pc * (share * (pot + bet + called) - bet) - pr * bet);
+    const pf = choices.filter((c) => c.action.kind === "fold").reduce((sum, c) => sum + c.p, 0);
+    const pr = choices.filter((c) => c.action.kind === "raise").reduce((sum, c) => sum + c.p, 0);
+    const pc = Math.max(0, 1 - pf - pr);
     total += weight;
     fold += weight * pf;
     call += weight * pc;
     raise += weight * pr;
-    won += weight * pc * share;
+    if (pc > 0) calls.push({ combo, weight: weight * pc });
+    if (pr > 0) raises.push({ combo, weight: weight * pr });
   }
-  return { ev: ev / total, fold: fold / total, call: call / total, raise: raise / total, winWhenCalled: call > 0 ? won / call : 0 };
+  const share = (r: WeightedCombo[]) => (r.length === 0 ? 0 : equityVsRanges(hero, board, [r], random, board.length === 5 ? 1 : 2500));
+  const [F, C, R] = [fold / total, call / total, raise / total];
+  const eqCall = C > 0.005 ? share(calls) : 0;
+  const eqRaise = R > 0.005 ? share(raises) : 0;
+  const ev = F * pot + C * (eqCall * finalPot - bet) + R * Math.max(-bet, eqRaise * finalPot - bet);
+  return { ev, fold: F, call: C, raise: R, winWhenCalled: eqCall };
 }
 
-/** Heads-up river decisions when hero is last to act and villain checked: bet or check, by EV. */
-function riverBetCheck(state: HandState, hero: number, a: ActionRecord, index: number): DecisionCheck | null {
+/**
+ * Bet or check when hero is last to act heads-up and villain checked: compare the EV of
+ * betting with checking. Exact on the river; a one-street estimate on the flop and turn.
+ */
+function betOrCheckReview(state: HandState, hero: number, a: ActionRecord, index: number, random: Random): DecisionCheck | null {
   const sit = a.situation;
+  if (sit.street === "preflop" || sit.toCall > 0 || !sit.lastToAct) return null;
   const opponents = liveOpponents(state, hero, index);
-  if (sit.street !== "river" || sit.toCall > 0 || !sit.lastToAct || opponents.length !== 1) return null;
+  if (opponents.length !== 1) return null;
   const villain = opponents[0];
-  const villainCheck = [...state.log.slice(0, index)].reverse().find((x) => x.seat === villain && x.street === "river");
+  const villainCheck = [...state.log.slice(0, index)].reverse().find((x) => x.seat === villain && x.street === sit.street);
   if (!villainCheck || villainCheck.kind !== "check") return null;
 
-  const style = state.seats[villain].style!;
+  const style = styleOf(state, villain);
   const holeCards = state.seats[hero].hole;
   const range = inferRange(style, villain, state.log.slice(0, index), [...holeCards, ...sit.board]);
   if (range.length === 0) return null;
-  const total = range.reduce((s, r) => s + r.weight, 0);
-  const showdown = range.reduce((s, r) => s + r.weight * showdownShare(holeCards, r.combo, sit.board), 0) / total;
-  const checkEV = showdown * sit.pot;
+  const river = sit.street === "river";
+  const checkShare = equityVsRanges(holeCards, sit.board, [range], random, river ? 1 : 3000);
+  const checkEV = checkShare * sit.pot;
   const who = styleName(state, villain);
-  const title = `River: you ${describe(a)}`;
+  const street = STREET_NAME[sit.street];
+  const title = `${street}: you ${describe(a)}`;
+  const kind: DecisionKind = a.kind === "check" ? "check" : "bet";
+  const styles = [style];
+  const estimate = river ? "" : " This street only: later bets are ignored.";
   const describeBet = (b: number, o: BetOutcome) =>
-    `A ${formatBB(b)} bet: ${who} folds ${pct(o.fold)}, calls ${pct(o.call)}${o.raise > 0.01 ? `, raises ${pct(o.raise)}` : ""}; you win ${pct(o.winWhenCalled)} of the calls. On average that earns ${formatBB(Math.round(o.ev))}, against ${formatBB(Math.round(checkEV))} for checking.`;
-  // Small differences are close calls; a mistake costs at least a tenth of the pot.
-  const small = Math.max(10, sit.pot * 0.05);
-  const large = Math.max(10, sit.pot * 0.1);
+    `A ${formatBB(b)} bet: ${who} folds ${pct(o.fold)}, calls ${pct(o.call)}${o.raise > 0.01 ? `, raises ${pct(o.raise)}` : ""}; ` +
+    `${river ? `you win ${pct(o.winWhenCalled)} of the calls` : `against the calls you have ${pct(o.winWhenCalled)} equity`}. ` +
+    `Betting earns about ${formatBB(Math.round(o.ev))} on average, against ${formatBB(Math.round(checkEV))} for checking.${estimate}`;
+  // Earlier streets are estimates, so they need a bigger difference before calling a mistake.
+  const small = Math.max(10, sit.pot * (river ? 0.05 : 0.1));
+  const large = Math.max(river ? 10 : 15, sit.pot * (river ? 0.1 : 0.15));
+  // Below this, a check that gives up a little is still fine.
+  const tiny = Math.max(3, sit.pot * 0.03);
+  const spot = (betSize: number, betBetter: boolean, detail: string): ChoiceExercise => ({
+    type: "choice",
+    prompt: `${street}. ${capitalize(who)} checks to you. Check or bet?`,
+    hand: codes(holeCards),
+    board: codes(sit.board),
+    info: [
+      { label: "Against", value: STYLE_INFO[style].name },
+      { label: "Pot", value: formatBB(sit.pot) },
+    ],
+    options: ["Check", `Bet ${formatBB(betSize)}`],
+    answer: betBetter ? 1 : 0,
+    explanation: `${FROM_TABLE} ${detail}`,
+  });
 
   if (a.kind === "bet" || a.kind === "raise") {
-    const o = betOutcome(style, villainCheck.situation, range, holeCards, sit.board, sit.pot, a.to);
+    const o = betOutcome(style, villainCheck.situation, range, holeCards, sit.board, sit.pot, a.to, random);
     const gain = o.ev - checkEV;
     const verdict: Verdict = gain >= 0 ? "good" : gain > -small ? "close" : gain <= -large ? "mistake" : "close";
-    return { street: "river", index, title, verdict, detail: describeBet(a.to, o) };
+    const detail = describeBet(a.to, o);
+    return { street: sit.street, index, title, verdict, detail, kind, styles, exercise: verdict === "mistake" ? spot(a.to, false, detail) : undefined };
   }
 
-  // Hero checked: compare with a half-pot and a pot-size bet.
-  const sizes = [Math.round(sit.pot / 2 / 5) * 5, Math.round(sit.pot / 5) * 5].filter((b) => b >= 10 && b <= sit.maxTo);
-  const options = sizes.map((b) => ({ b, o: betOutcome(style, villainCheck.situation, range, holeCards, sit.board, sit.pot, b) }));
+  // Hero checked: compare with a smaller and a larger bet.
+  const fractions = river ? [0.5, 1] : [1 / 3, 2 / 3];
+  const sizes = fractions.map((f) => Math.round((sit.pot * f) / 5) * 5).filter((b) => b >= 10 && b <= sit.maxTo);
+  const options = sizes.map((b) => ({ b, o: betOutcome(style, villainCheck.situation, range, holeCards, sit.board, sit.pot, b, random) }));
   const best = options.reduce((x, y) => (y.o.ev > x.o.ev ? y : x), options[0]);
   if (!best) return null;
   const gain = best.o.ev - checkEV;
-  if (gain < small) {
-    return {
-      street: "river",
-      index,
-      title,
-      verdict: "good",
-      detail: `Checking was right: you win ${pct(showdown)} at showdown, and betting didn't earn more. ${describeBet(best.b, best.o)}`,
-    };
+  if (gain < tiny) {
+    const why = river ? `you win ${pct(checkShare)} at showdown` : `you have ${pct(checkShare)} equity`;
+    const verdictText = gain > 0 ? `Checking was fine: ${why}, and betting earns only a little more.` : `Checking was right: ${why}, and betting didn't earn more.`;
+    return { street: sit.street, index, title, verdict: "good", detail: `${verdictText} ${describeBet(best.b, best.o)}`, kind, styles };
   }
-  return {
-    street: "river",
-    index,
-    title,
-    verdict: gain >= large ? "mistake" : "close",
-    detail: `Betting would have earned more. ${describeBet(best.b, best.o)}`,
-  };
+  const verdict: Verdict = gain >= large ? "mistake" : "close";
+  const detail = `Betting would have earned more. ${describeBet(best.b, best.o)}`;
+  return { street: sit.street, index, title, verdict, detail, kind, styles, exercise: verdict === "mistake" ? spot(best.b, true, detail) : undefined };
 }
 
 /** Coach's review of the hero's decisions in a finished hand. */
@@ -346,8 +467,8 @@ export function reviewHand(state: HandState, hero: number, random: Random = Math
     if (pre) return checks.push(pre);
     if (a.street === "preflop") return;
     if (a.situation.toCall > 0) return checks.push(facingBetCheck(state, hero, a, index, random));
-    const river = riverBetCheck(state, hero, a, index);
-    if (river) checks.push(river);
+    const betCheck = betOrCheckReview(state, hero, a, index, random);
+    if (betCheck) checks.push(betCheck);
   });
   return checks;
 }

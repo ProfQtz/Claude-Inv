@@ -168,6 +168,39 @@ describe("coach review", () => {
     expect(bet.find((c) => c.street === "river")!.verdict).toBe("good");
   });
 
+  it("grades flop c-bets heads-up: bluff the Nit, value bet the Station", () => {
+    const flop = (style: BotStyle, hero: string, action: "bet" | "check") =>
+      scripted(style, hero, "Ks 9h 4d 2c 6s", (s) => {
+        s = act(s, { kind: "raise", to: 25 });
+        s = botAct(s, "call");
+        s = botAct(s, "check");
+        return act(s, action === "bet" ? { kind: "bet", to: 35 } : { kind: "check" });
+      });
+    const flopCheck = (s: HandState) => reviewHand(s, 0, seededRandom("flop")).find((c) => c.street === "flop")!;
+
+    const checkedAir = flopCheck(flop("nit", "7c 2d", "check"));
+    expect(checkedAir.kind).toBe("check");
+    expect(checkedAir.styles).toEqual(["nit"]);
+    expect(checkedAir.verdict).toBe("mistake");
+    expect(checkedAir.detail).toContain("This street only");
+    expect(checkedAir.exercise!.options[checkedAir.exercise!.answer]).toMatch(/^Bet /);
+
+    expect(flopCheck(flop("nit", "7c 2d", "bet")).verdict).toBe("good");
+    expect(flopCheck(flop("station", "Kc Qd", "check")).verdict).toBe("mistake");
+    expect(flopCheck(flop("station", "7c 2d", "bet")).verdict).not.toBe("good");
+  });
+
+  it("turns a bad river call into a review question with the right answer", () => {
+    const check = reviewHand(riverCall("nit", "5s 5d", "Kh 9c 2d 7s Jh"), 0, seededRandom("q")).find((c) => c.street === "river")!;
+    expect(check.kind).toBe("call");
+    const q = check.exercise!;
+    expect(q.options).toEqual(["Fold", "Call"]);
+    expect(q.options[q.answer]).toBe("Fold");
+    expect(q.hand).toBe("5s 5d");
+    expect(q.board).toBe("Kh 9c 2d 7s Jh");
+    expect(q.explanation).toContain("From your practice table.");
+  });
+
   it("grades 6-max opens against the chart", () => {
     let s = newHand(
       Array.from({ length: 6 }, (_, i) => ({ name: `P${i}`, human: i === 3, style: i === 3 ? undefined : ("regular" as BotStyle) })),
@@ -179,6 +212,44 @@ describe("coach review", () => {
     s = act(s, { kind: "raise", to: 25 });
     const checks = reviewHand(s, 3);
     expect(checks[0].verdict).toBe("mistake");
+    expect(checks[0].kind).toBe("preflop");
     expect(checks[0].detail).toContain("outside the UTG opening range");
+    const q = checks[0].exercise!;
+    expect(q.options[q.answer]).toBe("Fold");
+    expect(q.info![0].value).toBe("Under the Gun");
+  });
+
+  it("gives every mistake a well-formed review question, and nothing else", () => {
+    const random = seededRandom("fuzz-review");
+    let mistakes = 0;
+    for (let hand = 0; hand < 120; hand++) {
+      const n = hand % 3 ? 2 : 6;
+      const table = Array.from({ length: n }, (_, i) => ({
+        name: `P${i}`,
+        human: i === 0,
+        style: (["nit", "station", "maniac", "regular"] as BotStyle[])[(hand + i) % 4],
+      }));
+      let s = newHand(table, hand % n, hand, random);
+      while (s.toAct !== null) {
+        const seat = s.seats[s.toAct];
+        const c = chooseBotAction(seat.style!, situation(s), seat.hole, random);
+        s = act(s, c.action, c.label);
+      }
+      for (const check of reviewHand(s, 0, random)) {
+        if (check.verdict !== "mistake") {
+          expect(check.exercise).toBeUndefined();
+          continue;
+        }
+        mistakes++;
+        const q = check.exercise!;
+        expect(q.answer).toBeGreaterThanOrEqual(0);
+        expect(q.answer).toBeLessThan(q.options.length);
+        expect(new Set(q.options).size).toBe(q.options.length);
+        const cards = [q.hand, q.board].filter(Boolean).join(" ").split(" ");
+        expect(new Set(cards).size).toBe(cards.length);
+        expect(parseCards(cards.join(" ")).length).toBe(cards.length);
+      }
+    }
+    expect(mistakes).toBeGreaterThan(5);
   });
 });
