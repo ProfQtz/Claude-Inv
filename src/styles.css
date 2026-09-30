@@ -263,8 +263,8 @@ p {
   bottom: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  grid-template-columns: repeat(5, 1fr);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
@@ -3283,4 +3283,216 @@ p {
 .result-copy {
   max-width: 46ch;
   margin-bottom: 12px;
+}
+
+/* ---------- Library ---------- */
+
+.library-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .library-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.library-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.library-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.library-page .back {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 10px;
+  margin-left: -10px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.search-box:focus-within {
+  border-color: var(--brand);
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+.glossary {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.glossary-entry {
+  display: grid;
+  grid-template-columns: minmax(120px, 190px) 1fr;
+  gap: 4px 16px;
+  padding: 12px 16px;
+}
+
+.glossary-entry + .glossary-entry {
+  border-top: 1px solid var(--border);
+}
+
+.glossary-entry dt {
+  font-weight: 700;
+}
+
+.glossary-entry dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+@media (max-width: 520px) {
+  .glossary-entry {
+    grid-template-columns: 1fr;
+  }
+}
+
+.empty-note {
+  padding: 16px 0;
+}
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sheet .section-title {
+  margin-top: 8px;
+}
+
+.sheet-note {
+  max-width: 64ch;
+  font-size: 0.92rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.data-table th {
+  padding: 10px 14px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.data-table td.num,
+.data-table th.num {
+  text-align: right;
+}
+
+.data-table td.num {
+  white-space: nowrap;
+}
+
+.data-table tr.highlight-row td {
+  background: color-mix(in srgb, var(--brand-soft) 50%, transparent);
+  font-weight: 600;
+}
+
+.guides-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guides-section + .guides-section {
+  margin-top: 12px;
+}
+
+.guides-section .section-title {
+  margin-top: 0;
+}
+
+.guide-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.guide-card summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.guide-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.guide-card[open] summary .row-chevron {
+  transform: rotate(90deg);
+}
+
+.guide-card .guide-sections {
+  padding: 0 16px 16px;
+  margin: 0;
+}
+
+.icon-disc.small {
+  width: 36px;
+  height: 36px;
+  margin: 0;
 }

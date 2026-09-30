@@ -29,7 +29,7 @@ import { LessonScreen } from "./screens/LessonScreen";
 import { DRILL_TITLES, PracticeScreen } from "./screens/PracticeScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { ShopScreen } from "./screens/ShopScreen";
-import { RangesScreen } from "./screens/RangesScreen";
+import { LibraryScreen, type LibraryView } from "./screens/LibraryScreen";
 import { SpeedRoundScreen } from "./screens/SpeedRoundScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { TestResultScreen } from "./screens/TestResultScreen";
@@ -70,12 +70,12 @@ export default function App() {
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
   const [speedRound, setSpeedRound] = useState(false);
-  const [rangesOpen, setRangesOpen] = useState(false);
+  const [libraryView, setLibraryView] = useState<LibraryView | null>(null);
   const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
 
   function switchTab(next: Tab) {
     setTab(next);
-    setRangesOpen(false);
+    setLibraryView(null);
   }
 
   function startLesson(lessonId: string) {
@@ -260,22 +260,22 @@ export default function App() {
           <LearnScreen progress={progress} now={now} onStartLesson={startLesson} onTestOut={startTest} />
         )}
         {tab === "practice" && (
-          rangesOpen ? (
-            <RangesScreen onBack={() => setRangesOpen(false)} />
-          ) : (
-            <PracticeScreen
-              progress={progress}
-              now={now}
-              onStart={startDrill}
-              onStartDaily={startDaily}
-              onStartReview={startReview}
-              onStartSpeed={() => setSpeedRound(true)}
-              onOpenRanges={() => setRangesOpen(true)}
-              onStartMix={startMix}
-              onSetLength={(n) => update((p) => ({ ...p, drillLength: n }))}
-            />
-          )
+          <PracticeScreen
+            progress={progress}
+            now={now}
+            onStart={startDrill}
+            onStartDaily={startDaily}
+            onStartReview={startReview}
+            onStartSpeed={() => setSpeedRound(true)}
+            onOpenRanges={() => {
+              setTab("library");
+              setLibraryView("charts");
+            }}
+            onStartMix={startMix}
+            onSetLength={(n) => update((p) => ({ ...p, drillLength: n }))}
+          />
         )}
+        {tab === "library" && <LibraryScreen view={libraryView} onView={setLibraryView} />}
         {tab === "shop" && (
           <ShopScreen
             progress={progress}
